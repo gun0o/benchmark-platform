@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "run_id": "5b1f5e0a-2a1e-4c8b-9a1e-9d6a9a1b2c3d",
+  "started_at": "2026-09-18T15:47:00.000000Z",
+  "finished_at": "2026-09-18T15:47:03.512345Z",
+  "machine": {
+    "id": "a3f1c2d4e5f60718293a4b5c6d7e8f90",
+    "hostname": "wsl-thinkpad",
+    "cpu_model": "Intel(R) Core(TM) Ultra 9 185H",
+    "physical_cores": 11,
+    "logical_cpus": 22,
+    "l1d_kb": 48,
+    "l2_kb": 2048,
+    "l3_kb": 24576,
+    "memory_bytes": 16659374080,
+    "os": "Ubuntu 22.04.5 LTS",
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "compiler": "g++ 13.4.0",
+    "compiler_flags": "-O3 -march=native",
+    "engine_version": "0.1.0",
+    "engine_git_sha": "abc1234",
+    "virtualized": "wsl2"
+  },
+  "argv": ["bench", "run", "--workload", "cpu_int", "--threads", "8", "--trials", "3"],
+  "results": [
+    { "workload": "cpu_int", "thread_count": 8, "working_set_bytes": 0, "metric": "cpu_int_ops",
+      "value": 12345678.9, "unit": "ops/s", "trial": 0, "timestamp": "2026-09-18T15:47:01.123456Z",
+      "duration_ns": 50123456, "params": { "cold": "clflush", "pinned": true, "warmup_trials": 5, "trial_ms": 50 } },
+    { "workload": "cpu_int", "thread_count": 8, "working_set_bytes": 0, "metric": "cpu_int_ops",
+      "value": 12245678.9, "unit": "ops/s", "trial": 1, "timestamp": "2026-09-18T15:47:01.223456Z",
+      "duration_ns": 50098765, "params": { "cold": "clflush", "pinned": true, "warmup_trials": 5, "trial_ms": 50 } },
+    { "workload": "mem_latency", "thread_count": 1, "working_set_bytes": 1048576, "metric": "mem_latency",
+      "value": 12.7, "unit": "ns", "trial": 0, "timestamp": "2026-09-18T15:47:02.000000Z",
+      "duration_ns": 50000000, "params": { "cold": "clflush", "pinned": true, "huge_pages": false } }
+  ],
+  "summary": [
+    { "workload": "cpu_int", "metric": "cpu_int_ops", "thread_count": 8, "working_set_bytes": 0,
+      "n": 2, "mean": 12295678.9, "median": 12295678.9, "stddev": 70710.678, "cov": 0.00575,
+      "min": 12245678.9, "p5": 12250678.9, "p95": 12340678.9, "max": 12345678.9 }
+  ]
+}

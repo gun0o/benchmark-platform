@@ -138,7 +138,8 @@ No system packages beyond the toolchain.
 
 ### api/ (Go 1.23+)
 
-Go is not installed yet on this machine; milestone M0.1 installs it.
+Go is installed user-locally at `~/.local/opt/go` (no sudo on this machine); the root
+`Makefile` prepends it to PATH, as does `~/.bashrc`.
 
 ```bash
 cd api

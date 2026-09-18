@@ -18,11 +18,17 @@ Milestone IDs are `M<phase>.<n>`. Each lists: Build / Verify / Pitfalls.
 
 ### M0.1 Toolchain
 **Build**
-- Install Go 1.23+ (tarball to `/usr/local/go`, add to PATH), `golangci-lint`,
-  `golang-migrate` CLI, `k6` (Grafana apt repo), `ninja-build`, `clang-format`,
-  `python3-jsonschema` (or `npx ajv-cli`) for schema validation.
+- Install Go 1.23+ (tarball; this machine has no passwordless sudo, so it lives in
+  `~/.local/opt/go` with `~/.local/opt/go/bin`, `~/go/bin` and `~/.local/bin` added to
+  PATH in `~/.bashrc` and `~/.profile`), `golangci-lint` and `golang-migrate` via
+  `go install`, `k6` and `ninja` as GitHub release binaries in `~/.local/bin`,
+  `clang-format` and `check-jsonschema` via `pip install --user`.
+- `psql` and `redis-cli` are not installed natively; use
+  `docker compose exec postgres psql …` and `docker compose exec redis redis-cli …`.
 - Confirm `docker compose version` works from WSL (Docker Desktop integration).
 - Rename the default branch: `git branch -M main`.
+- Done 2026-09-18: Go 1.27.1, k6 2.2.0, golangci-lint 2.13.2, migrate (dev), ninja 1.11.1,
+  clang-format 23.1.1, check-jsonschema 0.38.0, Compose v2.39.2.
 
 **Verify**
 ```
@@ -36,6 +42,12 @@ docker compose version
 **Pitfalls**
 - Ubuntu 22.04's apt Go is 1.18; do not use it. Use the official tarball.
 - k6 from apt on WSL needs the Grafana GPG key step; snap k6 is not available in WSL.
+- Non-login shells spawned by tools may not source `~/.bashrc`; scripts and the
+  Makefile prepend the user-local paths themselves.
+- **ninja must be < 1.12 with CMake 3.22.** ninja 1.12+ fails FetchContent sub-builds on
+  re-configure ("manifest 'build.ninja' still dirty after 100 tries"); CMake fixed its side
+  in 3.28.5/3.29.3. Pinned ninja 1.11.1 in `~/.local/bin`. (Ubuntu 24.04 CI runners ship
+  1.11.1 from apt.)
 
 ### M0.2 Repo skeleton and compose baseline
 **Build**
@@ -54,8 +66,11 @@ docker compose version
 - `docker compose -f deploy/docker-compose.yml up -d` → both services healthy in `docker compose ps`.
 - `psql "$DATABASE_URL" -c 'select 1'` and `redis-cli ping` succeed from WSL.
 - A hand-written sample run JSON validates against the schema:
-  `python3 -m jsonschema -i sample.json schema/benchmark-result.schema.json`.
+  `check-jsonschema --schemafile schema/benchmark-result.schema.json sample.json`.
 - A deliberately broken sample (missing `unit`) fails validation.
+
+- Done 2026-09-18: postgres 16.15 and redis 7 healthy; `select 1` and `PING` OK;
+  `schema/examples/run.json` validates and six deliberately broken variants are rejected.
 
 **Pitfalls**
 - Postgres healthcheck must use `pg_isready -U $POSTGRES_USER` or the API will race it.
@@ -83,7 +98,7 @@ docker compose version
 **Verify**
 - `ctest` passes (sysinfo parsing tests with fixture `/proc` snapshots; JSON round-trip test).
 - `bench sysinfo` shows the correct L3 (24576 KiB) and 22 logical CPUs on this machine.
-- `bench run … --out run.json && python3 -m jsonschema -i run.json schema/…` passes.
+- `bench run … --out run.json && check-jsonschema --schemafile schema/… run.json` passes.
 
 **Pitfalls**
 - `/sys/.../cache/index*` may be missing under WSL for some levels; fall back to `lscpu`

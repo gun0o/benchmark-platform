@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  schema:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install check-jsonschema
+      - run: |
+          for f in schema/examples/*.json; do
+            check-jsonschema --schemafile schema/benchmark-result.schema.json "$f" && echo "valid: $f"
+          done
+
+  engine:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: configure (portable arch, no -march=native on shared runners)
+        run: cmake -S engine --preset ci
+      - run: cmake --build --preset ci -j
+      - run: ctest --preset ci
+      - name: smoke
+        run: |
+          engine/build/ci/bench sysinfo
+          engine/build/ci/bench run --workload cpu_int --trials 3 --out run.json
+          engine/build/ci/bench validate run.json
+      - run: pip install check-jsonschema && check-jsonschema --schemafile schema/benchmark-result.schema.json run.json
+
+  api:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "api: skip until M1.3"      # replaced in M1.3 with go test + service containers
+
+  dashboard:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "dashboard: skip until M1.5" # replaced in M1.5 with npm ci + test + build
