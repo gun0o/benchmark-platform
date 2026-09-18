@@ -291,6 +291,31 @@ browser with zero manual steps beyond `make up` and `make bench`.
   sibling info is synthetic, so the default `--cpus` list uses stride 2 first
   (0,2,4,…) then fills odds; record the actual list in `params.cpus`.
 - Workers must not allocate in the timed region.
+- Done 2026-09-18 (write-up: `docs/notes/M2.1.md`, runs: `docs/results/m2.1/`). Deviations
+  from the text above, all measured:
+  - **`std::barrier` replaced by `bench::SpinBarrier`** (`engine/include/bench/sync.hpp`).
+    `std::barrier` parks waiters on a futex; on WSL2 that gave start spreads with medians
+    of 85-1100 us and maxima of 3-10 ms for 8 threads, and a spin-then-`wait(token)`
+    hybrid still hit ms tails via libstdc++'s yield-then-futex path. The spin barrier
+    (arrival counter + generation, completion function in the last arriver) gives a
+    0.3-0.5 us median. `std::latch` is used for "all workers finished setup".
+  - **Workers never sleep between trials.** Sleeping at the end barrier parks the vCPU and
+    the next release pays the un-park latency; both barriers spin.
+  - **Per-configuration warmup has a time floor (`--warmup-ms`, default 500).** The first
+    ~250 ms after spawning a pool show multi-ms spreads while Hyper-V settles the busy
+    vCPUs; trial-count warmup alone (5 x 20 ms) did not cover it.
+  - The `--no-barrier` flag was not added; the A/B lives in `tests/barrier_sync_test.cpp`
+    (none vs `std::barrier` vs `SpinBarrier`, warmed up like the runner).
+  - Start spread target "< 50 us": met by the typical trial (median 0.33 us pinned,
+    0.51 us unpinned; 91-93 of 100 trials under 50 us) but not by every trial (max
+    0.8-2 ms). The residue is host-level vCPU preemption and is recorded per trial in
+    `params.start_spread_us`.
+  - Pinning: 0 violations, but at 22 threads pinning is worse than not pinning (0.33 vs
+    0.43 scaling efficiency): 22 spinning workers plus the polling main thread on 22 vCPUs
+    is oversubscribed. Default `--pin` guidance: use it up to ~half the vCPUs.
+  - Scaling (median of 20 x 50 ms trials): 4.1 Gops/s at 1 thread, near-linear to 4
+    threads (16.7), 27.4 at 8, 32.9 at 16, ~30-34 at 22; per-thread throughput halves
+    beyond 8 threads (P-core vs E-core vCPUs, hyperthreads). First real dataset.
 
 ### M2.2 Statistics
 **Build**
@@ -400,6 +425,9 @@ browser with zero manual steps beyond `make up` and `make bench`.
   absorb it.
 - Do not trim outliers to hit the target. Report raw CoV; optionally also MAD/median as
   a robust companion, clearly labeled.
+- Trials whose `start_spread_us` is large (say > 1 ms) had a late worker; that is host
+  preemption, not the workload. Report the fraction of such trials per config alongside
+  CoV; do not silently drop them.
 - Use the clock self-test as a host-contention canary (M1.2 finding): if mean `now()`
   exceeds 100 ns at the start of a config, re-run that config rather than averaging in
   contaminated trials. Record how many re-runs were needed; that count is itself a

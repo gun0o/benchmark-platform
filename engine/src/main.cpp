@@ -6,6 +6,7 @@
 
 #include <CLI/CLI.hpp>
 #include <charconv>
+#include <csignal>
 #include <cstdio>
 #include <format>
 #include <fstream>
@@ -115,14 +116,24 @@ int main(int argc, char** argv) {
                     "Each trial runs whole batches until this many ms elapsed")
         ->default_val(50)
         ->check(CLI::PositiveNumber);
-    run->add_option("--warmup", cfg.warmup_trials, "Warmup trials per configuration, discarded")
+    run->add_option("--warmup", cfg.warmup_trials,
+                    "Minimum warmup trials per configuration, discarded")
         ->default_val(5)
+        ->check(CLI::NonNegativeNumber);
+    run->add_option("--warmup-ms", cfg.warmup_ms,
+                    "Minimum warmup time per configuration (ms), discarded")
+        ->default_val(500)
         ->check(CLI::NonNegativeNumber);
     run->add_option("--spin-ms", cfg.spin_ms,
                     "Busy-spin before the first trial so the core reaches turbo")
         ->default_val(500)
         ->check(CLI::NonNegativeNumber);
     run->add_option("--seed", cfg.seed, "RNG seed for workload inputs")->default_val(0);
+    std::string cpus_csv;
+    bool pin = false;
+    run->add_flag("--pin", pin,
+                  "Pin worker i to the i-th CPU of --cpus (default: 0,2,4,... then odds)");
+    run->add_option("--cpus", cpus_csv, "Comma-separated CPU ids for --pin, e.g. 0,2,4,6");
     run->add_option("-o,--out", out_path, "Output file (default stdout)");
     run->add_flag("--pretty", run_pretty, "Indent JSON output");
     run->add_flag("-v,--verbose", verbose, "Print each result to stderr as it completes");
@@ -147,6 +158,12 @@ int main(int argc, char** argv) {
         for (const auto& s : split_csv(ws_csv))
             cfg.working_sets.push_back(parse_size(s));
         cfg.verbose = verbose;
+        cfg.pin = pin;
+        for (const auto& c : split_csv(cpus_csv))
+            cfg.cpus.push_back(std::stoi(c));
+        if (!cfg.cpus.empty() && !pin)
+            throw CLI::ValidationError("--cpus", "requires --pin");
+        std::signal(SIGINT, [](int) { bench::request_abort(); });
 
         std::vector<std::string> argv_copy(argv, argv + argc);
         argv_copy[0] = "bench";
@@ -154,12 +171,19 @@ int main(int argc, char** argv) {
         bench::ProgressFn progress;
         if (verbose)
             progress = [](const bench::Result& r, bool warmup) {
-                std::cerr << std::format(
-                    "{:<8} t={:<3} ws={:<10} {}={:<4} {:>16.0f} {}  ops={:<12} {:.2f} ms\n",
-                    bench::to_string(r.workload), r.thread_count, r.working_set_bytes,
-                    warmup ? "warmup" : "trial ", warmup ? r.trial + 1000000 : r.trial, r.value,
-                    bench::to_string(bench::unit_of(r.metric)),
-                    r.params["ops"].get<std::uint64_t>(), static_cast<double>(r.duration_ns) / 1e6);
+                std::string cpus;
+                for (const auto& c : r.params["per_thread_cpu"])
+                    cpus += std::format("{} ", c.get<int>());
+                if (!cpus.empty())
+                    cpus.pop_back();
+                std::cerr << std::format("{:<8} t={:<3} {}={:<4} {:>14.0f} {}  {:.2f} ms  "
+                                         "spread={:.1f}us  pinviol={} cpus=[{}]\n",
+                                         bench::to_string(r.workload), r.thread_count,
+                                         warmup ? "warmup" : "trial ", warmup ? -r.trial : r.trial,
+                                         r.value, bench::to_string(bench::unit_of(r.metric)),
+                                         static_cast<double>(r.duration_ns) / 1e6,
+                                         r.params["start_spread_us"].get<double>(),
+                                         r.params["pin_violations"].get<int>(), cpus);
             };
         const auto envelope = bench::run_benchmarks(cfg, machine, std::move(argv_copy), progress);
         const auto j = bench::to_json(envelope);

@@ -129,6 +129,8 @@ cmake --preset asan && cmake --build --preset asan && ctest --preset asan   # sa
 ./build/release/bench sysinfo                # print machine block as JSON
 ./build/release/bench run --workload cpu_int --threads 1,2,4,8,16 --trials 30 --out run.json
 ./build/release/bench run --workload cpu_int --trials 12 --warmup 0 --spin-ms 0 --verbose   # see the warmup effect
+./build/release/bench run --workload cpu_int --threads 8 --pin --verbose                    # per-trial start spread + CPU ids
+ctest --preset release -LE perf              # skip the timing-ratio tests (false sharing, barrier spread)
 ./build/release/bench run --workload mem_latency --working-set 16K,64K,1M,8M,64M,512M --cold clflush
 ./build/release/bench run --all --trials 1000 --trial-ms 50 --pin --cold clflush --post http://localhost:8080
 ./build/release/bench validate run.json     # check output against schema/
@@ -186,9 +188,11 @@ npm run e2e                                 # Playwright (needs api + seeded DB)
   (it changes what an FP "operation" means). `-march=native` is recorded in the result's
   `machine.compiler_flags` field because it makes binaries machine-specific.
 - Use modern features where they help, not for show: `std::jthread` + `std::stop_token`
-  for workers, `std::barrier` for synchronized trial start, `std::latch` for completion,
-  `std::span` for buffers, `std::format` for text output, concepts for the `Workload`
-  interface, ranges for stats helpers, `std::bit_cast` for hash mixing.
+  for workers, `std::latch` for "all workers ready", `std::span` for buffers,
+  `std::format` for text output, concepts for the `Workload` interface, ranges for stats
+  helpers, `std::bit_cast` for hash mixing. Trial start/end synchronization uses
+  `bench::SpinBarrier`, not `std::barrier`: measured futex wake-up latency on WSL2 made
+  `std::barrier` unusable for a synchronized start (see `docs/notes/M2.1.md`).
 - Timing uses `std::chrono::steady_clock` only. Never `system_clock` or `high_resolution_clock`.
 - Per-thread mutable state lives in structs padded to 128 bytes (`alignas(128)`), not
   `std::hardware_destructive_interference_size` (GCC warns, and Intel's adjacent-line

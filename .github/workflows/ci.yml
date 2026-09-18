@@ -24,7 +24,7 @@ jobs:
       - name: configure (portable arch, no -march=native on shared runners)
         run: cmake -S engine --preset ci
       - run: cmake --build --preset ci -j
-      - run: ctest --preset ci
+      - run: ctest --preset ci -LE perf   # timing-ratio tests are not meaningful on shared runners
       - name: smoke
         run: |
           engine/build/ci/bench sysinfo
