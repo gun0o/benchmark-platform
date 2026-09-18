@@ -17,16 +17,18 @@ constexpr std::array<std::uint32_t, 64> kK = {
     0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
 
-inline std::uint32_t rotr(std::uint32_t x, int n) noexcept { return std::rotr(x, n); }
+inline std::uint32_t rotr(std::uint32_t x, int n) noexcept {
+    return std::rotr(x, n);
+}
 
 void compress(std::array<std::uint32_t, 8>& h, const std::uint8_t* block) noexcept {
     std::array<std::uint32_t, 64> w{};
     for (int i = 0; i < 16; ++i) {
         const std::size_t o = static_cast<std::size_t>(i) * 4;
         w[static_cast<std::size_t>(i)] = (static_cast<std::uint32_t>(block[o]) << 24) |
-                                          (static_cast<std::uint32_t>(block[o + 1]) << 16) |
-                                          (static_cast<std::uint32_t>(block[o + 2]) << 8) |
-                                          static_cast<std::uint32_t>(block[o + 3]);
+                                         (static_cast<std::uint32_t>(block[o + 1]) << 16) |
+                                         (static_cast<std::uint32_t>(block[o + 2]) << 8) |
+                                         static_cast<std::uint32_t>(block[o + 3]);
     }
     for (std::size_t i = 16; i < 64; ++i) {
         const std::uint32_t s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >> 3);
@@ -41,9 +43,23 @@ void compress(std::array<std::uint32_t, 8>& h, const std::uint8_t* block) noexce
         const std::uint32_t S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
         const std::uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
         const std::uint32_t t2 = S0 + maj;
-        hh = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
+        hh = g;
+        g = f;
+        f = e;
+        e = d + t1;
+        d = c;
+        c = b;
+        b = a;
+        a = t1 + t2;
     }
-    h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
+    h[0] += a;
+    h[1] += b;
+    h[2] += c;
+    h[3] += d;
+    h[4] += e;
+    h[5] += f;
+    h[6] += g;
+    h[7] += hh;
 }
 
 } // namespace
@@ -54,18 +70,22 @@ std::array<std::uint8_t, 32> sha256(std::span<const std::byte> data) noexcept {
     const auto* p = reinterpret_cast<const std::uint8_t*>(data.data());
     std::size_t n = data.size();
     std::size_t off = 0;
-    for (; off + 64 <= n; off += 64) compress(h, p + off);
+    for (; off + 64 <= n; off += 64)
+        compress(h, p + off);
 
     std::array<std::uint8_t, 128> tail{};
     const std::size_t rem = n - off;
-    if (rem > 0) std::memcpy(tail.data(), p + off, rem);
+    if (rem > 0)
+        std::memcpy(tail.data(), p + off, rem);
     tail[rem] = 0x80;
     const std::size_t tail_len = (rem + 1 + 8 <= 64) ? 64 : 128;
     const std::uint64_t bits = static_cast<std::uint64_t>(n) * 8;
     for (int i = 0; i < 8; ++i)
-        tail[tail_len - 1 - static_cast<std::size_t>(i)] = static_cast<std::uint8_t>(bits >> (8 * i));
+        tail[tail_len - 1 - static_cast<std::size_t>(i)] =
+            static_cast<std::uint8_t>(bits >> (8 * i));
     compress(h, tail.data());
-    if (tail_len == 128) compress(h, tail.data() + 64);
+    if (tail_len == 128)
+        compress(h, tail.data() + 64);
 
     std::array<std::uint8_t, 32> out{};
     for (std::size_t i = 0; i < 8; ++i) {

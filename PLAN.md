@@ -111,8 +111,10 @@ This milestone is where benchmark correctness is established. Everything later r
 
 **Build**
 - `timing.hpp`:
-  - `DoNotOptimize(T& v)`: `asm volatile("" : "+r,m"(v) : : "memory")` (Google Benchmark
-    style). `ClobberMemory()`: `asm volatile("" ::: "memory")`.
+  - `DoNotOptimize(T& v)`: `asm volatile("" : "+m,r"(v) : : "memory")` for register-sized
+    trivially-copyable types, `"+m"` only for anything larger (Google Benchmark style; the
+    `m` alternative must come first or GCC reports "impossible constraint" for constants).
+    `ClobberMemory()`: `asm volatile("" ::: "memory")`.
   - `Timer` around `std::chrono::steady_clock`; `clock_resolution_ns()` via
     `clock_getres(CLOCK_MONOTONIC)`; a self-test that back-to-back `now()` calls differ
     by ≤ 100 ns on average (detects a bad clocksource).
@@ -147,6 +149,14 @@ This milestone is where benchmark correctness is established. Everything later r
   benchmark measures latency rather than throughput. If `ops/s` ≈ core_GHz / 4, that is
   the symptom.
 - `-ffast-math` would let the compiler reassociate the FP kernel (M2.4); it is banned.
+- Done 2026-09-18: 36 tests green in release and debug. Trial-length scaling 1.969× ops at
+  0.983× ops/s; debug 7.5× slower; trial 0 without warmup −7% (median of 3) to −55% below
+  steady state, −0.2% with warmup. Full write-up in `docs/notes/M1.2.md`, runs in
+  `docs/results/m1.2/`.
+- **Finding:** on WSL2 the clock self-test is a host-contention canary. Every run whose
+  mean `now()` exceeded 100 ns (115–151 ns vs 33 ns normally) also showed 2–3× lower
+  throughput, with the guest 99% idle. Guest-side `taskset` did not help (vCPUs float on
+  Hyper-V). M2.5 re-runs any config whose self-test failed.
 
 ### M1.3 API: ingest and list
 **Build**
@@ -390,6 +400,10 @@ browser with zero manual steps beyond `make up` and `make bench`.
   absorb it.
 - Do not trim outliers to hit the target. Report raw CoV; optionally also MAD/median as
   a robust companion, clearly labeled.
+- Use the clock self-test as a host-contention canary (M1.2 finding): if mean `now()`
+  exceeds 100 ns at the start of a config, re-run that config rather than averaging in
+  contaminated trials. Record how many re-runs were needed; that count is itself a
+  measure of host noise. This is a pre-declared rule, not post-hoc trimming.
 - Laptop on battery or "Balanced" power plan can swing 20%; the run notes must say
   which plan was active.
 - Postgres/Redis containers idle at ~0% CPU but Docker Desktop's VM does not; for the

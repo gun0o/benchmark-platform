@@ -1,13 +1,16 @@
-#include <gtest/gtest.h>
-
 #include "bench/metric.hpp"
+
+#include <gtest/gtest.h>
 
 using namespace bench;
 
 TEST(Metric, RoundTripsThroughStrings) {
-    for (auto w : kAllWorkloads) EXPECT_EQ(parse_workload(to_string(w)), w);
-    for (auto m : kAllMetrics) EXPECT_EQ(parse_metric(to_string(m)), m);
-    for (auto u : kAllUnits) EXPECT_EQ(parse_unit(to_string(u)), u);
+    for (auto w : kAllWorkloads)
+        EXPECT_EQ(parse_workload(to_string(w)), w);
+    for (auto m : kAllMetrics)
+        EXPECT_EQ(parse_metric(to_string(m)), m);
+    for (auto u : kAllUnits)
+        EXPECT_EQ(parse_unit(to_string(u)), u);
 }
 
 TEST(Metric, RejectsUnknownNames) {

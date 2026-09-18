@@ -1,10 +1,10 @@
 // Structural validation of a run document. Mirrors schema/benchmark-result.schema.json
 // closely enough for `bench validate` to catch what the engine could emit wrongly; the
 // JSON Schema file remains the source of truth (CI validates examples against it).
+#include "bench/result.hpp"
+
 #include <format>
 #include <regex>
-
-#include "bench/result.hpp"
 
 namespace bench {
 namespace {
@@ -15,7 +15,9 @@ const std::regex kUuid{"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]
 const std::regex kTimestamp{"^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?Z$"};
 const std::regex kMachineId{"^[0-9a-f]{32}$"};
 
-bool is_int(const json& v) { return v.is_number_integer(); }
+bool is_int(const json& v) {
+    return v.is_number_integer();
+}
 
 void require(const json& j, const char* key, const std::string& where, Problems& out,
              bool (*pred)(const json&), const char* type_name) {
@@ -33,12 +35,14 @@ void check_machine(const json& m, Problems& out) {
         out.push_back("machine: expected object");
         return;
     }
-    for (const char* k : {"id", "hostname", "cpu_model", "os", "kernel", "compiler", "compiler_flags",
-                          "engine_version", "engine_git_sha"})
+    for (const char* k : {"id", "hostname", "cpu_model", "os", "kernel", "compiler",
+                          "compiler_flags", "engine_version", "engine_git_sha"})
         require(m, k, w, out, [](const json& v) { return v.is_string(); }, "string");
-    for (const char* k : {"physical_cores", "logical_cpus", "l1d_kb", "l2_kb", "l3_kb", "memory_bytes"})
+    for (const char* k :
+         {"physical_cores", "logical_cpus", "l1d_kb", "l2_kb", "l3_kb", "memory_bytes"})
         require(m, k, w, out, is_int, "integer");
-    if (m.contains("id") && m["id"].is_string() && !std::regex_match(m["id"].get<std::string>(), kMachineId))
+    if (m.contains("id") && m["id"].is_string() &&
+        !std::regex_match(m["id"].get<std::string>(), kMachineId))
         out.push_back("machine.id: must be 32 lowercase hex chars");
 }
 
@@ -49,7 +53,8 @@ void check_result(const json& r, std::size_t i, Problems& out) {
         return;
     }
     for (const char* k : {"schema_version", "run_id", "machine"})
-        if (r.contains(k)) out.push_back(std::format("{}: '{}' must not appear inside a run result", w, k));
+        if (r.contains(k))
+            out.push_back(std::format("{}: '{}' must not appear inside a run result", w, k));
     require(r, "workload", w, out, [](const json& v) { return v.is_string(); }, "string");
     require(r, "metric", w, out, [](const json& v) { return v.is_string(); }, "string");
     require(r, "unit", w, out, [](const json& v) { return v.is_string(); }, "string");
@@ -61,18 +66,23 @@ void check_result(const json& r, std::size_t i, Problems& out) {
     std::optional<Metric> metric;
     if (r.contains("metric") && r["metric"].is_string()) {
         metric = parse_metric(r["metric"].get<std::string>());
-        if (!metric) out.push_back(std::format("{}.metric: unknown '{}'", w, r["metric"].get<std::string>()));
+        if (!metric)
+            out.push_back(
+                std::format("{}.metric: unknown '{}'", w, r["metric"].get<std::string>()));
     }
     if (r.contains("workload") && r["workload"].is_string()) {
         const auto wl = parse_workload(r["workload"].get<std::string>());
-        if (!wl) out.push_back(std::format("{}.workload: unknown '{}'", w, r["workload"].get<std::string>()));
+        if (!wl)
+            out.push_back(
+                std::format("{}.workload: unknown '{}'", w, r["workload"].get<std::string>()));
         else if (metric && *wl != workload_of(*metric))
             out.push_back(std::format("{}.workload: '{}' expected for metric '{}'", w,
                                       to_string(workload_of(*metric)), to_string(*metric)));
     }
     if (r.contains("unit") && r["unit"].is_string()) {
         const auto un = parse_unit(r["unit"].get<std::string>());
-        if (!un) out.push_back(std::format("{}.unit: unknown '{}'", w, r["unit"].get<std::string>()));
+        if (!un)
+            out.push_back(std::format("{}.unit: unknown '{}'", w, r["unit"].get<std::string>()));
         else if (metric && *un != unit_of(*metric))
             out.push_back(std::format("{}.unit: '{}' expected for metric '{}'", w,
                                       to_string(unit_of(*metric)), to_string(*metric)));
@@ -80,7 +90,8 @@ void check_result(const json& r, std::size_t i, Problems& out) {
     if (r.contains("timestamp") && r["timestamp"].is_string() &&
         !std::regex_match(r["timestamp"].get<std::string>(), kTimestamp))
         out.push_back(w + ".timestamp: must be RFC 3339 UTC with 'Z'");
-    if (r.contains("thread_count") && is_int(r["thread_count"]) && r["thread_count"].get<long long>() < 1)
+    if (r.contains("thread_count") && is_int(r["thread_count"]) &&
+        r["thread_count"].get<long long>() < 1)
         out.push_back(w + ".thread_count: must be >= 1");
     if (r.contains("trial") && is_int(r["trial"]) && r["trial"].get<long long>() < 0)
         out.push_back(w + ".trial: must be >= 0");
@@ -98,23 +109,30 @@ std::vector<std::string> validate_run(const json& j) {
     }
     const std::string w = "run";
     require(j, "schema_version", w, out, is_int, "integer");
-    if (j.contains("schema_version") && is_int(j["schema_version"]) && j["schema_version"].get<int>() != 1)
+    if (j.contains("schema_version") && is_int(j["schema_version"]) &&
+        j["schema_version"].get<int>() != 1)
         out.push_back("run.schema_version: must be 1");
     require(j, "run_id", w, out, [](const json& v) { return v.is_string(); }, "string");
-    if (j.contains("run_id") && j["run_id"].is_string() && !std::regex_match(j["run_id"].get<std::string>(), kUuid))
+    if (j.contains("run_id") && j["run_id"].is_string() &&
+        !std::regex_match(j["run_id"].get<std::string>(), kUuid))
         out.push_back("run.run_id: must be a lowercase UUID");
     for (const char* k : {"started_at", "finished_at"}) {
         require(j, k, w, out, [](const json& v) { return v.is_string(); }, "string");
-        if (j.contains(k) && j[k].is_string() && !std::regex_match(j[k].get<std::string>(), kTimestamp))
+        if (j.contains(k) && j[k].is_string() &&
+            !std::regex_match(j[k].get<std::string>(), kTimestamp))
             out.push_back(std::format("run.{}: must be RFC 3339 UTC with 'Z'", k));
     }
     require(j, "argv", w, out, [](const json& v) { return v.is_array(); }, "array");
     require(j, "results", w, out, [](const json& v) { return v.is_array(); }, "array");
-    if (j.contains("machine")) check_machine(j["machine"], out);
-    else out.push_back("run: missing required 'machine'");
+    if (j.contains("machine"))
+        check_machine(j["machine"], out);
+    else
+        out.push_back("run: missing required 'machine'");
     if (j.contains("results") && j["results"].is_array())
-        for (std::size_t i = 0; i < j["results"].size(); ++i) check_result(j["results"][i], i, out);
-    if (j.contains("summary") && !j["summary"].is_array()) out.push_back("run.summary: expected array");
+        for (std::size_t i = 0; i < j["results"].size(); ++i)
+            check_result(j["results"][i], i, out);
+    if (j.contains("summary") && !j["summary"].is_array())
+        out.push_back("run.summary: expected array");
     return out;
 }
 

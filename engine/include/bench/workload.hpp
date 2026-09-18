@@ -1,12 +1,12 @@
 // Workload interface (a concept) and the static registry used by `bench list`.
 #pragma once
 
+#include "bench/metric.hpp"
+
 #include <concepts>
 #include <cstdint>
 #include <string_view>
 #include <vector>
-
-#include "bench/metric.hpp"
 
 namespace bench {
 

@@ -1,5 +1,7 @@
 #include "bench/sysinfo.hpp"
 
+#include "bench/sha256.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <format>
@@ -11,8 +13,6 @@
 #include <thread>
 #include <unistd.h>
 #include <utility>
-
-#include "bench/sha256.hpp"
 
 #ifndef BENCH_VERSION
 #define BENCH_VERSION "0.0.0"
@@ -29,7 +29,8 @@ namespace {
 
 std::string trim(std::string_view s) {
     const auto b = s.find_first_not_of(" \t\r\n");
-    if (b == std::string_view::npos) return {};
+    if (b == std::string_view::npos)
+        return {};
     const auto e = s.find_last_not_of(" \t\r\n");
     return std::string{s.substr(b, e - b + 1)};
 }
@@ -37,7 +38,8 @@ std::string trim(std::string_view s) {
 // Splits "key : value" cpuinfo/meminfo lines; returns false on lines without ':'.
 bool split_kv(const std::string& line, std::string& key, std::string& val) {
     const auto c = line.find(':');
-    if (c == std::string::npos) return false;
+    if (c == std::string::npos)
+        return false;
     key = trim(std::string_view{line}.substr(0, c));
     val = trim(std::string_view{line}.substr(c + 1));
     return true;
@@ -51,7 +53,8 @@ std::string read_first_line(const std::filesystem::path& p) {
 }
 
 std::string lower(std::string s) {
-    std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::ranges::transform(s, s.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return s;
 }
 
@@ -63,7 +66,8 @@ CpuInfo parse_cpuinfo(std::istream& in) {
     int phys = 0, core = -1;
     std::string line, key, val;
     auto flush_block = [&] {
-        if (core >= 0) cores.emplace(phys, core);
+        if (core >= 0)
+            cores.emplace(phys, core);
         phys = 0;
         core = -1;
     };
@@ -72,7 +76,8 @@ CpuInfo parse_cpuinfo(std::istream& in) {
             flush_block();
             continue;
         }
-        if (!split_kv(line, key, val)) continue;
+        if (!split_kv(line, key, val))
+            continue;
         if (key == "processor") {
             ++info.logical_cpus;
         } else if (key == "physical id") {
@@ -84,7 +89,8 @@ CpuInfo parse_cpuinfo(std::istream& in) {
         } else if (key == "flags" && info.flags.empty()) {
             std::istringstream fs{val};
             std::string f;
-            while (fs >> f) info.flags.push_back(f);
+            while (fs >> f)
+                info.flags.push_back(f);
         }
     }
     flush_block();
@@ -94,7 +100,8 @@ CpuInfo parse_cpuinfo(std::istream& in) {
 
 int parse_cache_size_kb(std::string_view text) {
     const std::string t = trim(text);
-    if (t.empty()) return 0;
+    if (t.empty())
+        return 0;
     std::size_t idx = 0;
     long v = 0;
     try {
@@ -103,23 +110,30 @@ int parse_cache_size_kb(std::string_view text) {
         return 0;
     }
     const std::string suffix = lower(t.substr(idx));
-    if (suffix == "m" || suffix == "mb") v *= 1024;
-    else if (suffix == "g" || suffix == "gb") v *= 1024 * 1024;
+    if (suffix == "m" || suffix == "mb")
+        v *= 1024;
+    else if (suffix == "g" || suffix == "gb")
+        v *= 1024 * 1024;
     return static_cast<int>(v);
 }
 
 CacheSizes read_cache_sizes(const std::filesystem::path& cpu0_cache_dir) {
     CacheSizes c;
     std::error_code ec;
-    if (!std::filesystem::is_directory(cpu0_cache_dir, ec)) return c;
+    if (!std::filesystem::is_directory(cpu0_cache_dir, ec))
+        return c;
     for (const auto& entry : std::filesystem::directory_iterator{cpu0_cache_dir, ec}) {
-        if (!entry.is_directory() || entry.path().filename().string().rfind("index", 0) != 0) continue;
+        if (!entry.is_directory() || entry.path().filename().string().rfind("index", 0) != 0)
+            continue;
         const int level = std::stoi("0" + read_first_line(entry.path() / "level"));
         const std::string type = lower(read_first_line(entry.path() / "type"));
         const int kb = parse_cache_size_kb(read_first_line(entry.path() / "size"));
-        if (level == 1 && type == "data") c.l1d_kb = std::max(c.l1d_kb, kb);
-        else if (level == 2) c.l2_kb = std::max(c.l2_kb, kb);
-        else if (level == 3) c.l3_kb = std::max(c.l3_kb, kb);
+        if (level == 1 && type == "data")
+            c.l1d_kb = std::max(c.l1d_kb, kb);
+        else if (level == 2)
+            c.l2_kb = std::max(c.l2_kb, kb);
+        else if (level == 3)
+            c.l3_kb = std::max(c.l3_kb, kb);
     }
     return c;
 }
@@ -142,7 +156,8 @@ std::string parse_os_release_pretty_name(std::istream& in) {
     while (std::getline(in, line)) {
         if (line.rfind("PRETTY_NAME=", 0) == 0) {
             std::string v = line.substr(12);
-            if (v.size() >= 2 && v.front() == '"' && v.back() == '"') v = v.substr(1, v.size() - 2);
+            if (v.size() >= 2 && v.front() == '"' && v.back() == '"')
+                v = v.substr(1, v.size() - 2);
             return v;
         }
     }
@@ -152,7 +167,8 @@ std::string parse_os_release_pretty_name(std::istream& in) {
 std::string detect_virtualization(std::istream& proc_version) {
     std::string line;
     std::getline(proc_version, line);
-    if (lower(line).find("microsoft") != std::string::npos) return "wsl2";
+    if (lower(line).find("microsoft") != std::string::npos)
+        return "wsl2";
     return "none";
 }
 
@@ -169,8 +185,9 @@ MachineInfo collect_machine_info(const SysPaths& paths) {
         std::ifstream in{paths.proc / "cpuinfo"};
         CpuInfo cpu = parse_cpuinfo(in);
         m.cpu_model = cpu.model.empty() ? "unknown" : cpu.model;
-        m.logical_cpus = cpu.logical_cpus > 0 ? cpu.logical_cpus
-                                              : static_cast<int>(std::thread::hardware_concurrency());
+        m.logical_cpus = cpu.logical_cpus > 0
+                             ? cpu.logical_cpus
+                             : static_cast<int>(std::thread::hardware_concurrency());
         m.physical_cores = cpu.physical_cores > 0 ? cpu.physical_cores : m.logical_cpus;
     }
     {

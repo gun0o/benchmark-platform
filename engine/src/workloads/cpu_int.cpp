@@ -1,8 +1,8 @@
 #include "bench/workloads/cpu_int.hpp"
 
-#include <random>
-
 #include "bench/timing.hpp"
+
+#include <random>
 
 namespace bench {
 
@@ -10,7 +10,8 @@ void CpuIntWorkload::setup(const WorkloadContext& ctx) {
     // Runtime-seeded so the compiler cannot constant-fold the lanes or K.
     constexpr std::uint64_t kGolden = 0x9E3779B97F4A7C15;
     std::mt19937_64 rng{ctx.seed ^ (kGolden * static_cast<std::uint64_t>(ctx.thread_index + 1))};
-    for (auto& l : lanes_) l = rng();
+    for (auto& l : lanes_)
+        l = rng();
     k_ = rng() | std::uint64_t{1}; // odd multiplier
 }
 
@@ -25,7 +26,8 @@ std::uint64_t CpuIntWorkload::run_batch() {
     }
     lanes_ = acc;
     std::uint64_t fold = 0;
-    for (auto a : acc) fold ^= a;
+    for (auto a : acc)
+        fold ^= a;
     sink_ ^= fold;
     DoNotOptimize(sink_);
     return kItersPerBatch * static_cast<std::uint64_t>(kLanes);

@@ -128,6 +128,7 @@ cmake --preset asan && cmake --build --preset asan && ctest --preset asan   # sa
 ./build/release/bench list                   # list workloads and metrics
 ./build/release/bench sysinfo                # print machine block as JSON
 ./build/release/bench run --workload cpu_int --threads 1,2,4,8,16 --trials 30 --out run.json
+./build/release/bench run --workload cpu_int --trials 12 --warmup 0 --spin-ms 0 --verbose   # see the warmup effect
 ./build/release/bench run --workload mem_latency --working-set 16K,64K,1M,8M,64M,512M --cold clflush
 ./build/release/bench run --all --trials 1000 --trial-ms 50 --pin --cold clflush --post http://localhost:8080
 ./build/release/bench validate run.json     # check output against schema/

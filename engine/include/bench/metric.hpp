@@ -28,14 +28,14 @@ enum class Metric {
 enum class Unit { ops_per_s, gb_per_s, ns, mb_per_s, iops, us };
 
 inline constexpr std::array kAllWorkloads = {
-    Workload::cpu_int,     Workload::cpu_fp,   Workload::cpu_hash, Workload::mem_bw,
+    Workload::cpu_int,     Workload::cpu_fp,   Workload::cpu_hash,  Workload::mem_bw,
     Workload::mem_latency, Workload::disk_seq, Workload::disk_rand,
 };
 
 inline constexpr std::array kAllMetrics = {
-    Metric::cpu_int_ops,         Metric::cpu_fp_ops,        Metric::cpu_hash_ops,
-    Metric::mem_read_bw,         Metric::mem_write_bw,      Metric::mem_copy_bw,
-    Metric::mem_latency,         Metric::disk_seq_read_bw,  Metric::disk_seq_write_bw,
+    Metric::cpu_int_ops,         Metric::cpu_fp_ops,           Metric::cpu_hash_ops,
+    Metric::mem_read_bw,         Metric::mem_write_bw,         Metric::mem_copy_bw,
+    Metric::mem_latency,         Metric::disk_seq_read_bw,     Metric::disk_seq_write_bw,
     Metric::disk_rand_read_iops, Metric::disk_rand_write_iops, Metric::disk_rand_read_p99_us,
 };
 

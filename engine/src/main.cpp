@@ -1,4 +1,9 @@
 // bench CLI: sysinfo | list | run | validate
+#include "bench/result.hpp"
+#include "bench/runner.hpp"
+#include "bench/sysinfo.hpp"
+#include "bench/workload.hpp"
+
 #include <CLI/CLI.hpp>
 #include <charconv>
 #include <cstdio>
@@ -8,24 +13,25 @@
 #include <string>
 #include <vector>
 
-#include "bench/result.hpp"
-#include "bench/runner.hpp"
-#include "bench/sysinfo.hpp"
-#include "bench/workload.hpp"
-
 namespace {
 
 // "4K,1M,64M" -> bytes. Bare numbers are bytes.
 std::uint64_t parse_size(const std::string& s) {
     std::uint64_t v = 0;
     const auto [p, ec] = std::from_chars(s.data(), s.data() + s.size(), v);
-    if (ec != std::errc{}) throw CLI::ValidationError("size", "not a number: " + s);
+    if (ec != std::errc{})
+        throw CLI::ValidationError("size", "not a number: " + s);
     std::string suffix(p, s.data() + s.size());
-    for (auto& c : suffix) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-    if (suffix.empty() || suffix == "B") return v;
-    if (suffix == "K" || suffix == "KB" || suffix == "KIB") return v << 10;
-    if (suffix == "M" || suffix == "MB" || suffix == "MIB") return v << 20;
-    if (suffix == "G" || suffix == "GB" || suffix == "GIB") return v << 30;
+    for (auto& c : suffix)
+        c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    if (suffix.empty() || suffix == "B")
+        return v;
+    if (suffix == "K" || suffix == "KB" || suffix == "KIB")
+        return v << 10;
+    if (suffix == "M" || suffix == "MB" || suffix == "MIB")
+        return v << 20;
+    if (suffix == "G" || suffix == "GB" || suffix == "GIB")
+        return v << 30;
     throw CLI::ValidationError("size", "unknown suffix: " + s);
 }
 
@@ -34,13 +40,15 @@ std::vector<std::string> split_csv(const std::string& s) {
     std::string cur;
     for (char c : s) {
         if (c == ',') {
-            if (!cur.empty()) out.push_back(cur);
+            if (!cur.empty())
+                out.push_back(cur);
             cur.clear();
         } else if (c != ' ') {
             cur.push_back(c);
         }
     }
-    if (!cur.empty()) out.push_back(cur);
+    if (!cur.empty())
+        out.push_back(cur);
     return out;
 }
 
@@ -64,22 +72,26 @@ int write_json(const bench::json& j, const std::string& out_path, bool pretty) {
 int main(int argc, char** argv) {
     CLI::App app{"bench: CPU / memory / cache / disk micro-benchmarks emitting JSON"};
     app.require_subcommand(1);
-    app.set_version_flag("--version", std::string{"bench "} + bench::collect_machine_info().engine_version);
+    app.set_version_flag("--version",
+                         std::string{"bench "} + bench::collect_machine_info().engine_version);
 
     // ---- sysinfo -------------------------------------------------------------------
     bool pretty = true;
     auto* sysinfo = app.add_subcommand("sysinfo", "Print the machine block as JSON");
     sysinfo->add_flag("!--compact", pretty, "Single-line JSON");
-    sysinfo->callback([&] { std::exit(write_json(bench::to_json(bench::collect_machine_info()), "", pretty)); });
+    sysinfo->callback(
+        [&] { std::exit(write_json(bench::to_json(bench::collect_machine_info()), "", pretty)); });
 
     // ---- list ----------------------------------------------------------------------
     auto* list = app.add_subcommand("list", "List workloads and the metrics they produce");
     list->callback([] {
-        std::cout << std::format("{:<12} {:<9} {:<62} {}\n", "WORKLOAD", "STATUS", "METRICS", "DESCRIPTION");
+        std::cout << std::format("{:<12} {:<9} {:<62} {}\n", "WORKLOAD", "STATUS", "METRICS",
+                                 "DESCRIPTION");
         for (const auto& d : bench::workload_registry()) {
             std::string metrics;
             for (const auto m : d.metrics) {
-                if (!metrics.empty()) metrics += ',';
+                if (!metrics.empty())
+                    metrics += ',';
                 metrics += bench::to_string(m);
             }
             std::cout << std::format("{:<12} {:<9} {:<62} {}\n", bench::to_string(d.kind),
@@ -96,9 +108,20 @@ int main(int argc, char** argv) {
     run->add_option("-w,--workload", workloads_csv, "Comma-separated workloads (see `bench list`)");
     run->add_flag("--all", all, "Run every implemented workload");
     run->add_option("-t,--threads", threads_csv, "Comma-separated thread counts (default 1)");
-    run->add_option("--working-set", ws_csv, "Comma-separated working sets, e.g. 4K,1M,64M (default 0)");
+    run->add_option("--working-set", ws_csv,
+                    "Comma-separated working sets, e.g. 4K,1M,64M (default 0)");
     run->add_option("-n,--trials", cfg.trials, "Timed trials per configuration")->default_val(1);
-    run->add_option("--trial-ms", cfg.trial_ms, "Target duration per trial (used from M1.2)")->default_val(50);
+    run->add_option("--trial-ms", cfg.trial_ms,
+                    "Each trial runs whole batches until this many ms elapsed")
+        ->default_val(50)
+        ->check(CLI::PositiveNumber);
+    run->add_option("--warmup", cfg.warmup_trials, "Warmup trials per configuration, discarded")
+        ->default_val(5)
+        ->check(CLI::NonNegativeNumber);
+    run->add_option("--spin-ms", cfg.spin_ms,
+                    "Busy-spin before the first trial so the core reaches turbo")
+        ->default_val(500)
+        ->check(CLI::NonNegativeNumber);
     run->add_option("--seed", cfg.seed, "RNG seed for workload inputs")->default_val(0);
     run->add_option("-o,--out", out_path, "Output file (default stdout)");
     run->add_flag("--pretty", run_pretty, "Indent JSON output");
@@ -106,18 +129,23 @@ int main(int argc, char** argv) {
     run->callback([&] {
         if (all) {
             for (const auto& d : bench::workload_registry())
-                if (d.implemented) cfg.workloads.push_back(d.kind);
+                if (d.implemented)
+                    cfg.workloads.push_back(d.kind);
         }
         for (const auto& name : split_csv(workloads_csv)) {
             const auto w = bench::parse_workload(name);
-            if (!w) throw CLI::ValidationError("--workload", "unknown workload: " + name);
+            if (!w)
+                throw CLI::ValidationError("--workload", "unknown workload: " + name);
             cfg.workloads.push_back(*w);
         }
-        if (cfg.workloads.empty()) throw CLI::ValidationError("--workload", "no workloads selected (or --all)");
+        if (cfg.workloads.empty())
+            throw CLI::ValidationError("--workload", "no workloads selected (or --all)");
         cfg.thread_counts.clear();
-        for (const auto& t : split_csv(threads_csv)) cfg.thread_counts.push_back(std::stoi(t));
+        for (const auto& t : split_csv(threads_csv))
+            cfg.thread_counts.push_back(std::stoi(t));
         cfg.working_sets.clear();
-        for (const auto& s : split_csv(ws_csv)) cfg.working_sets.push_back(parse_size(s));
+        for (const auto& s : split_csv(ws_csv))
+            cfg.working_sets.push_back(parse_size(s));
         cfg.verbose = verbose;
 
         std::vector<std::string> argv_copy(argv, argv + argc);
@@ -125,16 +153,19 @@ int main(int argc, char** argv) {
         const auto machine = bench::collect_machine_info();
         bench::ProgressFn progress;
         if (verbose)
-            progress = [](const bench::Result& r) {
-                std::cerr << std::format("{:<12} t={:<3} ws={:<10} trial={:<4} {:>14.3f} {}  ({} ns)\n",
-                                         bench::to_string(r.workload), r.thread_count, r.working_set_bytes,
-                                         r.trial, r.value, bench::to_string(bench::unit_of(r.metric)),
-                                         r.duration_ns);
+            progress = [](const bench::Result& r, bool warmup) {
+                std::cerr << std::format(
+                    "{:<8} t={:<3} ws={:<10} {}={:<4} {:>16.0f} {}  ops={:<12} {:.2f} ms\n",
+                    bench::to_string(r.workload), r.thread_count, r.working_set_bytes,
+                    warmup ? "warmup" : "trial ", warmup ? r.trial + 1000000 : r.trial, r.value,
+                    bench::to_string(bench::unit_of(r.metric)),
+                    r.params["ops"].get<std::uint64_t>(), static_cast<double>(r.duration_ns) / 1e6);
             };
         const auto envelope = bench::run_benchmarks(cfg, machine, std::move(argv_copy), progress);
         const auto j = bench::to_json(envelope);
         const auto problems = bench::validate_run(j); // never emit something we would reject
-        for (const auto& p : problems) std::cerr << "bench: internal validation: " << p << '\n';
+        for (const auto& p : problems)
+            std::cerr << "bench: internal validation: " << p << '\n';
         const int rc = write_json(j, out_path, run_pretty);
         std::exit(problems.empty() ? rc : 2);
     });
@@ -157,7 +188,8 @@ int main(int argc, char** argv) {
             std::cout << std::format("valid: {} ({} results)\n", in_path, j["results"].size());
             std::exit(0);
         }
-        for (const auto& p : problems) std::cerr << "  " << p << '\n';
+        for (const auto& p : problems)
+            std::cerr << "  " << p << '\n';
         std::cerr << std::format("invalid: {} ({} problems)\n", in_path, problems.size());
         std::exit(1);
     });

@@ -2,13 +2,13 @@
 // can feed fixture snapshots instead of the live /proc and /sys.
 #pragma once
 
+#include "bench/result.hpp"
+
 #include <cstdint>
 #include <filesystem>
 #include <istream>
 #include <string>
 #include <vector>
-
-#include "bench/result.hpp"
 
 namespace bench {
 

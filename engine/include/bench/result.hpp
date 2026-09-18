@@ -2,12 +2,12 @@
 // Shape is defined by schema/benchmark-result.schema.json.
 #pragma once
 
+#include "bench/metric.hpp"
+
 #include <cstdint>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
-
-#include "bench/metric.hpp"
 
 namespace bench {
 

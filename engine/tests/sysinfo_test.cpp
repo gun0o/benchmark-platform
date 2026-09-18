@@ -1,9 +1,9 @@
+#include "bench/sysinfo.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <sstream>
-
-#include "bench/sysinfo.hpp"
 
 using namespace bench;
 namespace fs = std::filesystem;
@@ -94,5 +94,6 @@ TEST(SysInfo, MachineIdIsStableAndSensitiveToInputs) {
     EXPECT_EQ(machine_id(a), machine_id(b));
     b.hostname = "other";
     EXPECT_NE(machine_id(a), machine_id(b));
-    for (char c : machine_id(a)) EXPECT_TRUE(std::isxdigit(static_cast<unsigned char>(c)) && !std::isupper(c));
+    for (char c : machine_id(a))
+        EXPECT_TRUE(std::isxdigit(static_cast<unsigned char>(c)) && !std::isupper(c));
 }

@@ -1,9 +1,9 @@
+#include "bench/result.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <regex>
-
-#include "bench/result.hpp"
 
 using namespace bench;
 
@@ -12,20 +12,45 @@ static RunEnvelope sample_run() {
     run.run_id = new_run_id();
     run.started_at = utc_now_rfc3339();
     run.finished_at = utc_now_rfc3339();
-    run.machine = MachineInfo{.id = std::string(32, 'a'), .hostname = "h", .cpu_model = "cpu",
-                              .physical_cores = 4, .logical_cpus = 8, .l1d_kb = 48, .l2_kb = 2048,
-                              .l3_kb = 24576, .memory_bytes = 1ull << 34, .os = "os", .kernel = "k",
-                              .compiler = "g++ 13", .compiler_flags = "-O3", .engine_version = "0.1.0",
-                              .engine_git_sha = "abc", .virtualized = "none"};
+    run.machine = MachineInfo{.id = std::string(32, 'a'),
+                              .hostname = "h",
+                              .cpu_model = "cpu",
+                              .physical_cores = 4,
+                              .logical_cpus = 8,
+                              .l1d_kb = 48,
+                              .l2_kb = 2048,
+                              .l3_kb = 24576,
+                              .memory_bytes = 1ull << 34,
+                              .os = "os",
+                              .kernel = "k",
+                              .compiler = "g++ 13",
+                              .compiler_flags = "-O3",
+                              .engine_version = "0.1.0",
+                              .engine_git_sha = "abc",
+                              .virtualized = "none"};
     run.argv = {"bench", "run"};
-    run.results.push_back(Result{.workload = Workload::cpu_int, .thread_count = 2, .working_set_bytes = 0,
-                                 .metric = Metric::cpu_int_ops, .value = 1.5e9, .trial = 0,
-                                 .timestamp = utc_now_rfc3339(), .duration_ns = 50'000'000,
+    run.results.push_back(Result{.workload = Workload::cpu_int,
+                                 .thread_count = 2,
+                                 .working_set_bytes = 0,
+                                 .metric = Metric::cpu_int_ops,
+                                 .value = 1.5e9,
+                                 .trial = 0,
+                                 .timestamp = utc_now_rfc3339(),
+                                 .duration_ns = 50'000'000,
                                  .params = json{{"cold", "none"}}});
-    run.summary.push_back(Summary{.workload = Workload::cpu_int, .metric = Metric::cpu_int_ops,
-                                  .thread_count = 2, .working_set_bytes = 0, .n = 1, .mean = 1.5e9,
-                                  .median = 1.5e9, .stddev = 0, .cov = 0, .min = 1.5e9, .p5 = 1.5e9,
-                                  .p95 = 1.5e9, .max = 1.5e9});
+    run.summary.push_back(Summary{.workload = Workload::cpu_int,
+                                  .metric = Metric::cpu_int_ops,
+                                  .thread_count = 2,
+                                  .working_set_bytes = 0,
+                                  .n = 1,
+                                  .mean = 1.5e9,
+                                  .median = 1.5e9,
+                                  .stddev = 0,
+                                  .cov = 0,
+                                  .min = 1.5e9,
+                                  .p5 = 1.5e9,
+                                  .p95 = 1.5e9,
+                                  .max = 1.5e9});
     return run;
 }
 
@@ -91,7 +116,8 @@ TEST(Result, SchemaExampleParsesAndValidates) {
 
 TEST(Result, RunIdIsUuidV4) {
     const std::regex re{"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"};
-    for (int i = 0; i < 100; ++i) EXPECT_TRUE(std::regex_match(new_run_id(), re)) << new_run_id();
+    for (int i = 0; i < 100; ++i)
+        EXPECT_TRUE(std::regex_match(new_run_id(), re)) << new_run_id();
     EXPECT_NE(new_run_id(), new_run_id());
 }
 

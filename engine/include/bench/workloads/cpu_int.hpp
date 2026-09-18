@@ -1,17 +1,18 @@
 // cpu_int: one op = one update of one 64-bit lane: acc = (acc * K) + (acc >> 17) ^ i.
 #pragma once
 
+#include "bench/workload.hpp"
+
 #include <array>
 #include <cstdint>
-
-#include "bench/workload.hpp"
 
 namespace bench {
 
 class CpuIntWorkload {
 public:
     static constexpr int kLanes = 8;
-    static constexpr std::uint64_t kItersPerBatch = 1u << 20; // ops per batch = iters * lanes
+    static constexpr std::uint64_t kItersPerBatch =
+        1u << 17; // 131072 iters * 8 lanes = 1 Mi ops per batch
 
     void setup(const WorkloadContext& ctx);
     std::uint64_t run_batch();

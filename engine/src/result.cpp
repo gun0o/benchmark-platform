@@ -10,7 +10,8 @@ namespace {
 
 template <class T> T get_required(const json& j, const char* key, const char* where) {
     const auto it = j.find(key);
-    if (it == j.end()) throw std::runtime_error(std::format("{}: missing '{}'", where, key));
+    if (it == j.end())
+        throw std::runtime_error(std::format("{}: missing '{}'", where, key));
     try {
         return it->get<T>();
     } catch (const json::exception& e) {
@@ -70,17 +71,15 @@ json to_json(const Summary& s) {
 
 json to_json(const RunEnvelope& run) {
     json results = json::array();
-    for (const auto& r : run.results) results.push_back(to_json(r));
+    for (const auto& r : run.results)
+        results.push_back(to_json(r));
     json summary = json::array();
-    for (const auto& s : run.summary) summary.push_back(to_json(s));
-    return json{{"schema_version", run.schema_version},
-                {"run_id", run.run_id},
-                {"started_at", run.started_at},
-                {"finished_at", run.finished_at},
-                {"machine", to_json(run.machine)},
-                {"argv", run.argv},
-                {"results", std::move(results)},
-                {"summary", std::move(summary)}};
+    for (const auto& s : run.summary)
+        summary.push_back(to_json(s));
+    return json{{"schema_version", run.schema_version}, {"run_id", run.run_id},
+                {"started_at", run.started_at},         {"finished_at", run.finished_at},
+                {"machine", to_json(run.machine)},      {"argv", run.argv},
+                {"results", std::move(results)},        {"summary", std::move(summary)}};
 }
 
 MachineInfo machine_from_json(const json& j) {
@@ -109,12 +108,14 @@ Result result_from_json(const json& j) {
     const char* w = "result";
     Result r;
     const auto wl = parse_workload(get_required<std::string>(j, "workload", w));
-    if (!wl) throw std::runtime_error("result.workload: unknown value");
+    if (!wl)
+        throw std::runtime_error("result.workload: unknown value");
     r.workload = *wl;
     r.thread_count = get_required<int>(j, "thread_count", w);
     r.working_set_bytes = get_required<std::uint64_t>(j, "working_set_bytes", w);
     const auto me = parse_metric(get_required<std::string>(j, "metric", w));
-    if (!me) throw std::runtime_error("result.metric: unknown value");
+    if (!me)
+        throw std::runtime_error("result.metric: unknown value");
     r.metric = *me;
     r.value = get_required<double>(j, "value", w);
     const auto un = parse_unit(get_required<std::string>(j, "unit", w));
@@ -133,7 +134,8 @@ Summary summary_from_json(const json& j) {
     Summary s;
     const auto wl = parse_workload(get_required<std::string>(j, "workload", w));
     const auto me = parse_metric(get_required<std::string>(j, "metric", w));
-    if (!wl || !me) throw std::runtime_error("summary: unknown workload/metric");
+    if (!wl || !me)
+        throw std::runtime_error("summary: unknown workload/metric");
     s.workload = *wl;
     s.metric = *me;
     s.thread_count = get_required<int>(j, "thread_count", w);
@@ -155,15 +157,18 @@ RunEnvelope run_from_json(const json& j) {
     RunEnvelope run;
     run.schema_version = get_required<int>(j, "schema_version", w);
     if (run.schema_version != 1)
-        throw std::runtime_error(std::format("run.schema_version: unsupported {}", run.schema_version));
+        throw std::runtime_error(
+            std::format("run.schema_version: unsupported {}", run.schema_version));
     run.run_id = get_required<std::string>(j, "run_id", w);
     run.started_at = get_required<std::string>(j, "started_at", w);
     run.finished_at = get_required<std::string>(j, "finished_at", w);
     run.machine = machine_from_json(get_required<json>(j, "machine", w));
     run.argv = get_required<std::vector<std::string>>(j, "argv", w);
-    for (const auto& r : get_required<json>(j, "results", w)) run.results.push_back(result_from_json(r));
+    for (const auto& r : get_required<json>(j, "results", w))
+        run.results.push_back(result_from_json(r));
     if (j.contains("summary"))
-        for (const auto& s : j["summary"]) run.summary.push_back(summary_from_json(s));
+        for (const auto& s : j["summary"])
+            run.summary.push_back(summary_from_json(s));
     return run;
 }
 
@@ -172,8 +177,8 @@ std::string new_run_id() {
     std::uint64_t hi = rng(), lo = rng();
     hi = (hi & 0xFFFFFFFFFFFF0FFFull) | 0x0000000000004000ull; // version 4
     lo = (lo & 0x3FFFFFFFFFFFFFFFull) | 0x8000000000000000ull; // variant 10xx
-    return std::format("{:08x}-{:04x}-{:04x}-{:04x}-{:012x}", hi >> 32, (hi >> 16) & 0xFFFF, hi & 0xFFFF,
-                       lo >> 48, lo & 0xFFFFFFFFFFFFull);
+    return std::format("{:08x}-{:04x}-{:04x}-{:04x}-{:012x}", hi >> 32, (hi >> 16) & 0xFFFF,
+                       hi & 0xFFFF, lo >> 48, lo & 0xFFFFFFFFFFFFull);
 }
 
 std::string utc_now_rfc3339() {
