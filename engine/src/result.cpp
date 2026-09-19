@@ -66,7 +66,8 @@ json to_json(const Summary& s) {
                 {"min", s.min},
                 {"p5", s.p5},
                 {"p95", s.p95},
-                {"max", s.max}};
+                {"max", s.max},
+                {"mad", s.mad}};
 }
 
 json to_json(const RunEnvelope& run) {
@@ -149,6 +150,7 @@ Summary summary_from_json(const json& j) {
     s.p5 = get_required<double>(j, "p5", w);
     s.p95 = get_required<double>(j, "p95", w);
     s.max = get_required<double>(j, "max", w);
+    s.mad = j.value("mad", 0.0); // optional: older documents predate it
     return s;
 }
 

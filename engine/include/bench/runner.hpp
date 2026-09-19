@@ -24,11 +24,12 @@ struct RunConfig {
     std::vector<Workload> workloads;
     std::vector<int> thread_counts{1};
     std::vector<std::uint64_t> working_sets{0};
-    int trials = 1;        // timed trials emitted per configuration
-    int warmup_trials = 5; // at least this many warmup trials per configuration, never emitted
-    int warmup_ms = 500;   // ...and warmup continues until at least this much time has passed
-    int trial_ms = 50;     // each worker runs whole batches until this much time has elapsed
-    int spin_ms = 500;     // one global busy spin before the first configuration (frequency ramp)
+    int trials = 1;         // timed trials emitted per configuration
+    int warmup_trials = 5;  // at least this many warmup trials per configuration, never emitted
+    int warmup_ms = 500;    // ...and warmup continues until at least this much time has passed
+    int trial_ms = 50;      // each worker runs whole batches until this much time has elapsed
+    int spin_ms = 500;      // one global busy spin before the first configuration (frequency ramp)
+    double max_seconds = 0; // safety cap on the whole run; 0 = no cap. Stops at a trial boundary.
     std::uint64_t seed = 0;
     bool pin = false;      // pin worker i to cpus[i % cpus.size()]
     std::vector<int> cpus; // empty => default_cpu_list(logical_cpus)

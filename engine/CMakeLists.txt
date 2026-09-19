@@ -81,6 +81,7 @@ add_library(bench_core STATIC
   src/result.cpp
   src/validate.cpp
   src/timing.cpp
+  src/stats.cpp
   src/runner.cpp
   src/workloads/cpu_int.cpp)
 target_include_directories(bench_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

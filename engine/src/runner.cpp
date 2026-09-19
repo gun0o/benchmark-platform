@@ -1,5 +1,6 @@
 #include "bench/runner.hpp"
 
+#include "bench/stats.hpp"
 #include "bench/sync.hpp"
 #include "bench/timing.hpp"
 #include "bench/workload.hpp"
@@ -8,6 +9,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <exception>
 #include <format>
 #include <iostream>
@@ -149,10 +151,14 @@ void worker(std::stop_token st, int index, const RunConfig& cfg, std::uint64_t w
         w.teardown();
 }
 
+// Why a configuration stopped early, if it did.
+enum class StopReason { none, aborted, timed_out };
+
 template <WorkloadImpl W>
-bool run_config(const RunConfig& cfg, Workload kind, Metric metric, int n_threads,
-                std::uint64_t working_set, const ClockCheck& clock,
-                const std::vector<int>& cpu_list, RunEnvelope& out, const ProgressFn& progress) {
+StopReason run_config(const RunConfig& cfg, Workload kind, Metric metric, int n_threads,
+                      std::uint64_t working_set, const ClockCheck& clock,
+                      const std::vector<int>& cpu_list, Clock::time_point deadline,
+                      RunEnvelope& out, const ProgressFn& progress) {
     Clock::time_point t_release{}, t_done{};
     SpinBarrier start_b(n_threads + 1, [&t_release] { t_release = Clock::now(); });
     SpinBarrier end_b(n_threads + 1, [&t_done] { t_done = Clock::now(); });
@@ -195,18 +201,24 @@ bool run_config(const RunConfig& cfg, Workload kind, Metric metric, int n_thread
     // Warmup: at least warmup_trials trials AND at least warmup_ms of wall time. The time
     // floor matters on VMs, where the first ~250 ms of a configuration show multi-ms start
     // spreads while the hypervisor settles the now-busy vCPUs onto physical cores.
-    bool completed = true;
+    StopReason stop = StopReason::none;
     constexpr auto kMainPoll = std::chrono::microseconds{50};
     const auto warmup_floor = std::chrono::milliseconds(cfg.warmup_ms);
     const auto config_start = Clock::now();
     int warmups_done = 0, timed_done = 0;
+    std::vector<double> values; // timed trial values, for the per-config summary
+    values.reserve(static_cast<std::size_t>(cfg.trials));
     for (;;) {
         if (g_abort.load(std::memory_order_relaxed)) {
-            completed = false;
+            stop = StopReason::aborted;
             break;
         }
-        const bool warmup =
-            warmups_done < cfg.warmup_trials || (Clock::now() - config_start) < warmup_floor;
+        const auto now = Clock::now();
+        if (deadline != Clock::time_point{} && now >= deadline) {
+            stop = StopReason::timed_out;
+            break;
+        }
+        const bool warmup = warmups_done < cfg.warmup_trials || (now - config_start) < warmup_floor;
         if (!warmup && timed_done >= cfg.trials)
             break;
 
@@ -275,11 +287,35 @@ bool run_config(const RunConfig& cfg, Workload kind, Metric metric, int n_thread
             {"pin_failures", pin_failures}};
         if (progress)
             progress(r, warmup);
-        if (!warmup)
+        if (!warmup) {
+            values.push_back(r.value);
             out.results.push_back(std::move(r));
+        }
     }
     stop_workers(); // jthread destructors then join
-    return completed;
+
+    // One summary per configuration, over the timed trials that actually ran. Statistics
+    // are defined in stats.hpp (sample stddev, numpy-linear percentiles).
+    if (!values.empty()) {
+        const SummaryStats st = summarize(values);
+        Summary sum;
+        sum.workload = kind;
+        sum.metric = metric;
+        sum.thread_count = n_threads;
+        sum.working_set_bytes = working_set;
+        sum.n = static_cast<int>(st.n);
+        sum.mean = st.mean;
+        sum.median = st.median;
+        sum.stddev = st.stddev;
+        sum.cov = st.cov;
+        sum.min = st.min;
+        sum.p5 = st.p5;
+        sum.p95 = st.p95;
+        sum.max = st.max;
+        sum.mad = st.mad;
+        out.summary.push_back(sum);
+    }
+    return stop;
 }
 
 } // namespace
@@ -304,6 +340,8 @@ RunEnvelope run_benchmarks(const RunConfig& cfg, const MachineInfo& machine,
         throw std::invalid_argument("warmup_ms must be >= 0");
     if (cfg.trial_ms < 1)
         throw std::invalid_argument("trial_ms must be >= 1");
+    if (cfg.max_seconds < 0 || !std::isfinite(cfg.max_seconds))
+        throw std::invalid_argument("max_seconds must be >= 0 and finite");
     for (int n : cfg.thread_counts)
         if (n < 1)
             throw std::invalid_argument("thread_count must be >= 1");
@@ -342,26 +380,38 @@ RunEnvelope run_benchmarks(const RunConfig& cfg, const MachineInfo& machine,
 
     busy_spin(std::chrono::milliseconds(cfg.spin_ms));
 
-    bool completed = true;
+    // The safety cap covers the whole run, measured from after the frequency-ramp spin.
+    // A zero time_point means "no deadline".
+    const auto deadline = cfg.max_seconds > 0
+                              ? Clock::now() + std::chrono::duration_cast<Clock::duration>(
+                                                   std::chrono::duration<double>(cfg.max_seconds))
+                              : Clock::time_point{};
+
+    StopReason stop = StopReason::none;
     for (Workload kind : cfg.workloads) {
         for (int threads : cfg.thread_counts) {
             for (std::uint64_t ws : cfg.working_sets) {
-                if (!completed)
-                    break;
                 switch (kind) {
                 case Workload::cpu_int:
-                    completed = run_config<CpuIntWorkload>(cfg, kind, Metric::cpu_int_ops, threads,
-                                                           ws, clock, cpu_list, run, progress);
+                    stop = run_config<CpuIntWorkload>(cfg, kind, Metric::cpu_int_ops, threads, ws,
+                                                      clock, cpu_list, deadline, run, progress);
                     break;
                 default:
                     throw std::runtime_error(
                         std::format("workload '{}' is not implemented yet", to_string(kind)));
                 }
+                if (stop != StopReason::none)
+                    goto stopped; // leaves all three loops; the alternative is a flag in each
             }
         }
     }
-    if (!completed)
+stopped:
+    if (stop == StopReason::aborted)
         std::cerr << "bench: interrupted; writing results collected so far\n";
+    else if (stop == StopReason::timed_out)
+        std::cerr << std::format("bench: --max-seconds {:g} reached; writing results collected "
+                                 "so far ({} trials, {} summaries)\n",
+                                 cfg.max_seconds, run.results.size(), run.summary.size());
     run.finished_at = utc_now_rfc3339();
     return run;
 }

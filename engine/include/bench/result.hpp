@@ -54,7 +54,9 @@ struct Summary {
     int thread_count = 1;
     std::uint64_t working_set_bytes = 0;
     int n = 0;
-    double mean = 0, median = 0, stddev = 0, cov = 0, min = 0, p5 = 0, p95 = 0, max = 0;
+    // stddev is the SAMPLE standard deviation (n-1); p5/p95/median use numpy's "linear"
+    // percentile interpolation; cov = stddev / mean; mad = median(|x - median(x)|).
+    double mean = 0, median = 0, stddev = 0, cov = 0, min = 0, p5 = 0, p95 = 0, max = 0, mad = 0;
 
     bool operator==(const Summary&) const = default;
 };

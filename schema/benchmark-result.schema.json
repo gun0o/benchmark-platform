@@ -182,7 +182,8 @@
         "min": { "type": "number" },
         "p5": { "type": "number", "description": "numpy 'linear' percentile." },
         "p95": { "type": "number" },
-        "max": { "type": "number" }
+        "max": { "type": "number" },
+        "mad": { "type": "number", "minimum": 0, "description": "Median absolute deviation: median(|x - median(x)|). Optional robust companion to stddev/cov." }
       }
     },
 

@@ -99,6 +99,54 @@ void check_result(const json& r, std::size_t i, Problems& out) {
         out.push_back(w + ".value: must be finite");
 }
 
+void check_summary(const json& s, std::size_t i, Problems& out) {
+    const std::string w = std::format("summary[{}]", i);
+    if (!s.is_object()) {
+        out.push_back(w + ": expected object");
+        return;
+    }
+    require(s, "workload", w, out, [](const json& v) { return v.is_string(); }, "string");
+    require(s, "metric", w, out, [](const json& v) { return v.is_string(); }, "string");
+    for (const char* k : {"thread_count", "working_set_bytes", "n"})
+        require(s, k, w, out, is_int, "integer");
+    for (const char* k : {"mean", "median", "stddev", "cov", "min", "p5", "p95", "max"})
+        require(s, k, w, out, [](const json& v) { return v.is_number(); }, "number");
+
+    std::optional<Metric> metric;
+    if (s.contains("metric") && s["metric"].is_string()) {
+        metric = parse_metric(s["metric"].get<std::string>());
+        if (!metric)
+            out.push_back(
+                std::format("{}.metric: unknown '{}'", w, s["metric"].get<std::string>()));
+    }
+    if (s.contains("workload") && s["workload"].is_string()) {
+        const auto wl = parse_workload(s["workload"].get<std::string>());
+        if (!wl)
+            out.push_back(
+                std::format("{}.workload: unknown '{}'", w, s["workload"].get<std::string>()));
+        else if (metric && *wl != workload_of(*metric))
+            out.push_back(std::format("{}.workload: '{}' expected for metric '{}'", w,
+                                      to_string(workload_of(*metric)), to_string(*metric)));
+    }
+    if (s.contains("n") && is_int(s["n"]) && s["n"].get<long long>() < 1)
+        out.push_back(w + ".n: must be >= 1");
+    for (const char* k : {"stddev", "cov", "mad"})
+        if (s.contains(k) && s[k].is_number() && s[k].get<double>() < 0)
+            out.push_back(std::format("{}.{}: must be >= 0", w, k));
+    // Ordering invariants that any correct summary satisfies.
+    auto num = [&](const char* k) {
+        return s.contains(k) && s[k].is_number() ? s[k].get<double>() : 0.0;
+    };
+    if (s.contains("min") && s.contains("max") && num("min") > num("max"))
+        out.push_back(w + ": min > max");
+    if (s.contains("min") && s.contains("median") && num("min") > num("median"))
+        out.push_back(w + ": min > median");
+    if (s.contains("median") && s.contains("max") && num("median") > num("max"))
+        out.push_back(w + ": median > max");
+    if (s.contains("p5") && s.contains("p95") && num("p5") > num("p95"))
+        out.push_back(w + ": p5 > p95");
+}
+
 } // namespace
 
 std::vector<std::string> validate_run(const json& j) {
@@ -131,8 +179,13 @@ std::vector<std::string> validate_run(const json& j) {
     if (j.contains("results") && j["results"].is_array())
         for (std::size_t i = 0; i < j["results"].size(); ++i)
             check_result(j["results"][i], i, out);
-    if (j.contains("summary") && !j["summary"].is_array())
-        out.push_back("run.summary: expected array");
+    if (j.contains("summary")) {
+        if (!j["summary"].is_array())
+            out.push_back("run.summary: expected array");
+        else
+            for (std::size_t i = 0; i < j["summary"].size(); ++i)
+                check_summary(j["summary"][i], i, out);
+    }
     return out;
 }
 

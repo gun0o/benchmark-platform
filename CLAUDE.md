@@ -130,6 +130,7 @@ cmake --preset asan && cmake --build --preset asan && ctest --preset asan   # sa
 ./build/release/bench run --workload cpu_int --threads 1,2,4,8,16 --trials 30 --out run.json
 ./build/release/bench run --workload cpu_int --trials 12 --warmup 0 --spin-ms 0 --verbose   # see the warmup effect
 ./build/release/bench run --workload cpu_int --threads 8 --pin --verbose                    # per-trial start spread + CPU ids
+./build/release/bench run --workload cpu_int --trials 1000 --max-seconds 120                # safety cap; stops at a trial boundary
 ctest --preset release -LE perf              # skip the timing-ratio tests (false sharing, barrier spread)
 ./build/release/bench run --workload mem_latency --working-set 16K,64K,1M,8M,64M,512M --cold clflush
 ./build/release/bench run --all --trials 1000 --trial-ms 50 --pin --cold clflush --post http://localhost:8080
@@ -308,13 +309,20 @@ Field rules:
   "summary": [
     { "workload": "cpu_int", "metric": "cpu_int_ops", "thread_count": 8, "working_set_bytes": 0,
       "n": 1000, "mean": 1.2e7, "median": 1.2e7, "stddev": 2.1e5, "cov": 0.0175,
-      "min": 1.1e7, "p5": 1.15e7, "p95": 1.25e7, "max": 1.3e7 }
+      "min": 1.1e7, "p5": 1.15e7, "p95": 1.25e7, "max": 1.3e7, "mad": 1.4e5 }
   ]
 }
 ```
 
 Inside a run envelope, results omit `machine` (it is hoisted to the top level) to keep
 1000-trial files small. The API flattens them back into full results on ingest.
+
+One `summary` entry per configuration, over the timed trials that actually ran (a run cut
+short by `--max-seconds` or Ctrl-C still summarizes what it measured). `stddev` is the
+**sample** standard deviation (n−1); `median`, `p5` and `p95` use numpy's `linear`
+percentile interpolation; `cov` = stddev / mean; `mad` = median(|x − median(x)|), optional
+and reported as a robust companion to stddev. Definitions live in `engine/include/bench/stats.hpp`
+and are pinned by fixtures in `engine/tests/fixtures/stats.json`.
 
 ## The 12 dashboard metrics
 

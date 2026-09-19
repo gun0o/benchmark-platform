@@ -129,6 +129,10 @@ int main(int argc, char** argv) {
         ->default_val(500)
         ->check(CLI::NonNegativeNumber);
     run->add_option("--seed", cfg.seed, "RNG seed for workload inputs")->default_val(0);
+    run->add_option("--max-seconds", cfg.max_seconds,
+                    "Safety cap on total run time; stops at a trial boundary (0 = no cap)")
+        ->default_val(0)
+        ->check(CLI::NonNegativeNumber);
     std::string cpus_csv;
     bool pin = false;
     run->add_flag("--pin", pin,

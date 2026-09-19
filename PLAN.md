@@ -335,6 +335,30 @@ browser with zero manual steps beyond `make up` and `make bench`.
 **Pitfalls**
 - Sample (n−1) vs population stddev: use sample; state it in the summary.
 - Percentile definitions differ across tools; pin to numpy `linear` and say so.
+- Done 2026-09-18 (write-up: `docs/notes/M2.2.md`, runs: `docs/results/m2.2/`). Notes on
+  what the measurements forced:
+  - **Welford is not used for the batch statistics.** It met the cancellation and merge
+    checks, but on the ill-conditioned fixture (values ~1e9, stddev ~1) its single pass
+    lands 1.4e-8 from numpy, which fails the 1e-9 tolerance this milestone asks for. The
+    batch path (`mean`, `sample_variance`, `sample_stddev`, `cov`, `summarize`) is the
+    two-pass algorithm numpy itself uses and matches to 1.5e-14. `Welford` stays in
+    `stats.hpp` with its merge for the streaming case (per-thread accumulators, M2.5+),
+    documented as accurate to ~kappa·eps where kappa = mean/stddev.
+  - The Welford merge test's tolerance scales with that condition number rather than
+    being a flat 1e-9: reassociating floating-point work cannot do better.
+  - `mad` was added to the summary (optional in the schema, so no `schema_version` bump)
+    and is worth having: on the thread sweep, stddev/MAD ran 1.5–2.8 where clean Gaussian
+    noise would give 1.48, which is how a few slow trials announce themselves.
+  - `--max-seconds` stops at a trial boundary and still emits a summary over the trials
+    that ran; `params.warmups_run` and `summary.n` say what actually happened.
+  - Three pre-existing test problems surfaced and were fixed: the clock self-test asserted
+    a ~30 ns `now()` cost that no sanitizer build can meet (now skipped under ASan/TSan
+    with the reason printed); the trial-length scaling test compared against a literal 2x
+    instead of the measured rate, folding in up to one batch of overshoot; and that same
+    test used 3-trial means, whose standard error on a machine with ~10% per-trial
+    variation made any tight bound flaky (now 9 trials compared by median).
+  - The `asan` preset is now part of the routine check: 55/55 in release, debug, asan and
+    tsan.
 
 ### M2.3 Cold-cache infrastructure
 **Build**

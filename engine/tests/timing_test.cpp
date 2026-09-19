@@ -7,14 +7,32 @@
 
 using namespace bench;
 
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+#define BENCH_SANITIZED 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer) || __has_feature(thread_sanitizer)
+#define BENCH_SANITIZED 1
+#endif
+#endif
+
 TEST(Timing, ClockSelfTestPasses) {
     const ClockCheck c = clock_selftest();
     EXPECT_TRUE(c.monotonic);
     EXPECT_GT(c.resolution_ns, 0u);
     EXPECT_LE(c.resolution_ns, 1000u) << "coarse clocksource";
+#ifdef BENCH_SANITIZED
+    // A sanitizer instruments every call, so the measured cost of now() (~180 ns under
+    // ASan against ~30 ns without) says nothing about the clocksource. The engine's own
+    // warning fires for the same reason, which is correct: sanitizer builds are for
+    // finding bugs, not for measuring. Only the instrumentation-independent properties
+    // are asserted here.
+    GTEST_SKIP() << "clock cost assertion is meaningless under a sanitizer (mean now() = "
+                 << c.mean_call_ns << " ns)";
+#else
     EXPECT_LE(c.mean_call_ns, ClockCheck::kMaxMeanCallNs)
         << "now() is expensive: vDSO/TSC not in use?";
     EXPECT_TRUE(c.ok);
+#endif
 }
 
 TEST(Timing, SteadyClockIsCLOCK_MONOTONIC) {
