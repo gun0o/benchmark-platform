@@ -1,0 +1,6 @@
+cpu_int  t=4   warmup=14      17065514334 ops/s  30.17 ms  spread=0.1us  cold=clflush/0.8us  pinviol=0 cpus=[0 2 4 6]
+cpu_int  t=4   warmup=15      17347678305 ops/s  30.16 ms  spread=9.6us  cold=clflush/0.9us  pinviol=0 cpus=[0 2 4 6]
+cpu_int  t=4   trial =0       17313021184 ops/s  30.22 ms  spread=0.1us  cold=clflush/1.0us  pinviol=0 cpus=[0 2 4 6]
+cpu_int  t=4   trial =1       17173618507 ops/s  30.10 ms  spread=8.9us  cold=clflush/0.4us  pinviol=0 cpus=[0 2 4 6]
+cpu_int  t=4   trial =2       17267372571 ops/s  30.18 ms  spread=9.1us  cold=clflush/1.0us  pinviol=0 cpus=[0 2 4 6]
+cpu_int  t=4   trial =3       17216459532 ops/s  30.21 ms  spread=8.3us  cold=clflush/0.4us  pinviol=0 cpus=[0 2 4 6]

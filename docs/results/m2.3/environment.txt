@@ -1,0 +1,7 @@
+# environment at the start of the M2.3 verification runs
+2026-09-19T15:19:24-05:00
+AC online: 1  battery: Charging 94%
+Windows scheme: Balanced (381b4222)   power mode overlay: Best power efficiency (961cc777), AC and DC
+load average: 1.33 1.42 0.81
+THP policy: always [madvise] never
+clflushopt in /proc/cpuinfo: 22 cpus

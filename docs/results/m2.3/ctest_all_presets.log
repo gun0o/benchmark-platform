@@ -1,0 +1,18 @@
+=== ctest --preset release -LE perf ===
+100% tests passed, 0 tests failed out of 71
+Total Test time (real) =   3.29 sec
+=== ctest --preset debug -LE perf ===
+100% tests passed, 0 tests failed out of 71
+Total Test time (real) =   3.48 sec
+=== ctest --preset asan -LE perf ===
+100% tests passed, 0 tests failed out of 71
+Total Test time (real) =   5.48 sec
+=== ctest --preset tsan -LE perf ===
+100% tests passed, 0 tests failed out of 71
+Total Test time (real) =   5.08 sec
+=== ctest --preset ci -LE perf ===
+100% tests passed, 0 tests failed out of 71
+Total Test time (real) =   3.27 sec
+=== perf-labelled, release only ===
+100% tests passed, 0 tests failed out of 7
+Total Test time (real) =   4.76 sec

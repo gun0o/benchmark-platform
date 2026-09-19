@@ -393,6 +393,47 @@ browser with zero manual steps beyond `make up` and `make bench`.
   (the buffer cannot be cache-resident anyway) and record `params.cold = "n/a"`.
 - Prefetchers can refill lines between flush and barrier if the thread touches nearby
   memory; do the flush last, then only the barrier.
+- Done 2026-09-19 (write-up: `docs/notes/M2.3.md`, runs: `docs/results/m2.3/`). Measured
+  plugged in, Windows plan Balanced, power mode **Best power efficiency** (left as found,
+  so absolute values are a floor). Deviations from the text above, all measured:
+  - **Runtime CPUID dispatch instead of `#ifdef __CLFLUSHOPT__`.** The flush loop carries
+    `[[gnu::target("clflushopt")]]` and is selected by `__builtin_cpu_supports`, so the
+    portable `ci` build (`-march=x86-64-v3`, which excludes CLFLUSHOPT) still emits the
+    instruction and reaches it: 14 sites, same 29x ratio as the native build. An `#ifdef`
+    would have silently demoted `ci` to `CLFLUSH` on a CPU that supports the fast one.
+  - **THP is read per-mapping from `/proc/self/smaps`, not as a `smaps_rollup` delta.** The
+    rollup is process-wide and several workers allocate concurrently, so a before/after
+    difference can credit one thread's huge pages to another. (The first parser classified
+    every mapping header as a field line, because the header's device field `08:40` also
+    contains a colon, and reported a plausible 0 huge pages for a buffer that had 100%.)
+  - **The 2 MiB alignment matters less than assumed.** Measured on a 48 MiB mapping:
+    aligned+madvise 48/48 MiB, aligned without madvise 0, unaligned+madvise 46/48. Under
+    the `madvise` policy the madvise call does the work; alignment buys back the partial
+    huge page at each end. Both are done; the header comment was corrected to match.
+  - **`params.cold` records what happened, `params.cold_requested` what was asked.** A
+    region larger than L3 (or of zero bytes) gives `cold: "n/a"`. Flushing dirty lines
+    measured ~5.5 ns/line, so 512 MiB would cost ~46 ms/trial, confirming the pitfall.
+  - **Verify 3 ran on the pointer chase, not `mem_latency`** (M3.2). Steady state is pass
+    3, not pass 2: at 1 MiB the second pass after a flush is still ~15% slow. First pass
+    22-36x warm, converged by p3 at all of 64 KiB / 256 KiB / 1 MiB.
+  - **Verify 2 needed 41 repetitions, not 9.** At 9 the eviction ratio swung 2.95x-23.63x
+    on the same binary and failed its own 3x bar once. At 41, ten consecutive runs gave
+    9.4x-25.8x (median 16.4x) against clflush's 13.5x-31.1x (median 28.7x). clflush cools
+    more thoroughly (higher post-cool latency in 8 of 10 runs) and costs 0.9 us against
+    eviction's 2.4 ms, so it stays the default.
+  - **Pinning the latency test to vCPU 0 made it worse**, not better (warm baseline 3.65 ->
+    12.34 ns/load in one run of three): vCPU 0 carries interrupt work, and guest-level
+    pinning does not determine the physical core (M2.1). Left unpinned; repetitions are the
+    fix for the spread.
+  - Cold mode leaves `cpu_int` unchanged (<2% across all three modes, inside a 6-20% CoV),
+    which is the expected result for an 80-byte working set and is the evidence that
+    preparation stays outside the timed region.
+  - `params.cold_requested`, `cold_bytes`, `cold_prep_{mean,max}_us` and `huge_page_bytes`
+    were added to the schema alongside the existing `cold` and `huge_pages` (additive, no
+    `schema_version` bump), and `bench validate` now checks the `params` keys the schema
+    pins down.
+  - 20 new tests (16 functional + 4 perf-labelled); 71/71 in release, debug, asan, tsan and
+    ci, 7/7 perf in release.
 
 ### M2.4 CPU workloads and the 10M ops/s target
 **Build**

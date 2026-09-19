@@ -1,0 +1,25 @@
+Running main() from /home/matthewlee/benchmark-platform/engine/build/release/_deps/googletest-src/googletest/src/gtest_main.cc
+[==========] Running 4 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 4 tests from ColdCache
+[ RUN      ] ColdCache.FlushMakesTheNextPassMissToDram
+clflush 256 KiB    n=41  warm   3.65  cold p5 100.03 / med  104.83 / p95  121.93 ns/load   ratio  28.74x (per-rep 15.62x.. 34.96x)  require >= 5.0x
+[       OK ] ColdCache.FlushMakesTheNextPassMissToDram (520 ms)
+[ RUN      ] ColdCache.EvictionMakesTheNextPassMissToDram
+evict 48 MiB       n=41  warm   3.73  cold p5  38.33 / med   57.51 / p95  117.97 ns/load   ratio  15.41x (per-rep  6.44x.. 53.54x)  require >= 3.0x
+[       OK ] ColdCache.EvictionMakesTheNextPassMissToDram (629 ms)
+[ RUN      ] ColdCache.NoColdModeLeavesTheRegionWarm
+none (control)     n=41  warm   5.35  cold p5   4.01 / med    5.35 / p95    7.65 ns/load   ratio   1.00x (per-rep  0.51x..  6.32x)  require >= 0.0x
+[       OK ] ColdCache.NoColdModeLeavesTheRegionWarm (503 ms)
+[ RUN      ] ColdCache.ColdCostsTheFirstPassAndNothingAfterward
+ns per dependent load, median of 10 trials after 2 discarded:
+  size     warm  |  after flush: p1      p2     p3     p4     p5
+    64 KiB   3.63  |              130.56   3.24   3.63   3.63   3.63
+   256 KiB   3.82  |              106.03   3.84   3.82   3.82   3.82
+  1024 KiB   6.47  |              143.92   7.53   6.84   6.78   6.82
+[       OK ] ColdCache.ColdCostsTheFirstPassAndNothingAfterward (557 ms)
+[----------] 4 tests from ColdCache (2211 ms total)
+
+[----------] Global test environment tear-down
+[==========] 4 tests from 1 test suite ran. (2211 ms total)
+[  PASSED  ] 4 tests.

@@ -97,6 +97,21 @@ void check_result(const json& r, std::size_t i, Problems& out) {
         out.push_back(w + ".trial: must be >= 0");
     if (r.contains("value") && r["value"].is_number() && !std::isfinite(r["value"].get<double>()))
         out.push_back(w + ".value: must be finite");
+    // params is open-ended, but the keys the schema does pin down are checked here, because
+    // a result claiming a cold mode the engine cannot perform is exactly the kind of quiet
+    // lie this project is trying not to publish.
+    if (r.contains("params") && r["params"].is_object()) {
+        const json& p = r["params"];
+        if (const auto it = p.find("cold"); it != p.end()) {
+            if (!it->is_string())
+                out.push_back(w + ".params.cold: expected string");
+            else if (const auto c = it->get<std::string>();
+                     c != "clflush" && c != "evict" && c != "none" && c != "n/a")
+                out.push_back(std::format("{}.params.cold: unknown '{}'", w, c));
+        }
+        if (const auto it = p.find("huge_pages"); it != p.end() && !it->is_boolean())
+            out.push_back(w + ".params.huge_pages: expected boolean");
+    }
 }
 
 void check_summary(const json& s, std::size_t i, Problems& out) {

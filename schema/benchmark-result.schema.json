@@ -76,13 +76,22 @@
       "type": "object",
       "description": "Everything needed to reproduce the trial. Keys are stable but open-ended.",
       "properties": {
-        "cold": { "type": "string", "enum": ["clflush", "evict", "none", "n/a"] },
+        "cold": { "type": "string", "enum": ["clflush", "evict", "none", "n/a"],
+                  "description": "What cold preparation actually happened. \"n/a\" means it was requested but could not apply, e.g. a region larger than the LLC." },
+        "cold_requested": { "type": "string", "enum": ["clflush", "evict", "none"],
+                            "description": "What --cold asked for; differs from \"cold\" when the machine could not do it." },
+        "cold_bytes": { "type": "integer", "minimum": 0,
+                        "description": "Region flushed (clflush) or scratch buffer streamed (evict), per thread." },
+        "cold_prep_mean_us": { "type": "number", "minimum": 0 },
+        "cold_prep_max_us": { "type": "number", "minimum": 0 },
         "pinned": { "type": "boolean" },
         "cpus": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
         "warmup_trials": { "type": "integer", "minimum": 0 },
         "trial_ms": { "type": "integer", "minimum": 1 },
         "seed": { "type": "integer" },
         "huge_pages": { "type": "boolean" },
+        "huge_page_bytes": { "type": "integer", "minimum": 0,
+                             "description": "AnonHugePages actually granted, from /proc/self/smaps. Never assumed." },
         "block_bytes": { "type": "integer", "minimum": 1 },
         "queue_depth": { "type": "integer", "minimum": 1 }
       }

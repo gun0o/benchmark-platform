@@ -4,7 +4,9 @@
 #include "bench/workload.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <span>
 
 namespace bench {
 
@@ -17,6 +19,15 @@ public:
     void setup(const WorkloadContext& ctx);
     std::uint64_t run_batch();
     void teardown() noexcept {}
+
+    // cpu_int has no input buffer: its whole working set is the 8 lanes, the multiplier and
+    // the sink, which live in this object. Flushing it makes every trial reload that state
+    // from memory, so no trial inherits a warm copy from the one before. It is 128 bytes,
+    // so the effect on a 50 ms trial is unmeasurable by construction - which is the point:
+    // the mechanism is uniform across workloads and its cost here is known to be nil.
+    [[nodiscard]] std::span<const std::byte> cold_region() const {
+        return std::as_bytes(std::span<const CpuIntWorkload>{this, 1});
+    }
 
 private:
     std::array<std::uint64_t, kLanes> lanes_{};

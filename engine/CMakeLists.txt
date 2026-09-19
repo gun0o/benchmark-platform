@@ -81,6 +81,7 @@ add_library(bench_core STATIC
   src/result.cpp
   src/validate.cpp
   src/timing.cpp
+  src/cache.cpp
   src/stats.cpp
   src/runner.cpp
   src/workloads/cpu_int.cpp)

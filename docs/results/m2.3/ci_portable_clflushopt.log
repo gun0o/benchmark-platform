@@ -1,0 +1,10 @@
+# The portable 'ci' preset is built for -march=x86-64-v3, which does NOT include
+# CLFLUSHOPT. The instruction is still present and still executed, reached through the
+# runtime __builtin_cpu_supports check rather than a compile-time #ifdef.
+
+$ objdump -d build/ci/bench | grep -c clflushopt
+14
+
+$ ./build/ci/tests/cold_cache_test --gtest_filter='*Flush*'
+clflush 256 KiB    n=41  warm   3.65  cold p5  49.94 / med  106.19 / p95  157.16 ns/load   ratio  29.09x (per-rep  0.04x..246.21x)  require >= 5.0x
+[       OK ] ColdCache.FlushMakesTheNextPassMissToDram (533 ms)

@@ -1,0 +1,22 @@
+# Every cold mode round-trips through both validators, and a result that claims a cold
+# mode outside the enum is rejected by both.
+
+$ check-jsonschema --schemafile schema/benchmark-result.schema.json docs/results/m2.3/cold_clflush.json
+ok -- validation done
+$ bench validate docs/results/m2.3/cold_clflush.json
+valid: ..cold_clflush.json (100 results)
+$ check-jsonschema --schemafile schema/benchmark-result.schema.json docs/results/m2.3/cold_evict.json
+ok -- validation done
+$ bench validate docs/results/m2.3/cold_evict.json
+valid: ..cold_evict.json (100 results)
+$ check-jsonschema --schemafile schema/benchmark-result.schema.json docs/results/m2.3/cold_none.json
+ok -- validation done
+$ bench validate docs/results/m2.3/cold_none.json
+valid: ..cold_none.json (100 results)
+
+# negative control: params.cold = 'maybe'
+$ bench validate bad.json
+  results[0].params.cold: unknown 'maybe'
+invalid: bad.json (1 problems)
+$ check-jsonschema ... bad.json
+  bad.json::$.results[0].params.cold: 'maybe' is not one of ['clflush', 'evict', 'none', 'n/a']

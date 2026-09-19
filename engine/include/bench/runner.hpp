@@ -9,6 +9,7 @@
 // numbers and the start spread can be reported without false sharing between workers.
 #pragma once
 
+#include "bench/cache.hpp"
 #include "bench/metric.hpp"
 #include "bench/result.hpp"
 
@@ -31,8 +32,9 @@ struct RunConfig {
     int spin_ms = 500;      // one global busy spin before the first configuration (frequency ramp)
     double max_seconds = 0; // safety cap on the whole run; 0 = no cap. Stops at a trial boundary.
     std::uint64_t seed = 0;
-    bool pin = false;      // pin worker i to cpus[i % cpus.size()]
-    std::vector<int> cpus; // empty => default_cpu_list(logical_cpus)
+    ColdMode cold = ColdMode::clflush; // per-trial cache preparation, done before the barrier
+    bool pin = false;                  // pin worker i to cpus[i % cpus.size()]
+    std::vector<int> cpus;             // empty => default_cpu_list(logical_cpus)
     bool verbose = false;
 };
 

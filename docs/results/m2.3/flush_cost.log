@@ -1,0 +1,24 @@
+# What does flush_lines cost? Release build, -march=native, plugged in, 2026-09-19.
+# Median of 1800 calls after 200 discarded; the two Clock::now() reads cost ~15 ns
+# and are included in every row.
+
+empty (two clock reads only)         15.0 ns
+80 B: clflushopt only (no fence)     15.0 ns
+80 B: + sfence                       17.0 ns
+80 B: + sfence + mfence (as built)  422.0 ns
+mfence alone                         27.0 ns
+
+flush_lines cost vs region size (lines already clean: instruction cost only):
+       80 B (    2 lines)     128.0 ns    64.00 ns/line
+     4096 B (   64 lines)     260.0 ns     4.06 ns/line
+    65536 B ( 1024 lines)    2672.0 ns     2.61 ns/line
+   262144 B ( 4096 lines)   10370.0 ns     2.53 ns/line
+  1048576 B (16384 lines)   19516.5 ns     1.19 ns/line
+
+same, but every line dirtied first (what the runner actually flushes);
+the dirtying pass is measured separately and subtracted:
+       80 B (    2 lines)     294.0 ns   147.00 ns/line  (dirtying alone    16.0 ns)
+     4096 B (   64 lines)    1135.0 ns    17.73 ns/line  (dirtying alone    25.0 ns)
+    65536 B ( 1024 lines)   13227.5 ns    12.92 ns/line  (dirtying alone   939.0 ns)
+   262144 B ( 4096 lines)   24277.0 ns     5.93 ns/line  (dirtying alone  3839.0 ns)
+  1048576 B (16384 lines)   90375.5 ns     5.52 ns/line  (dirtying alone 15007.0 ns)

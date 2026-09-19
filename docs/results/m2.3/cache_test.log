@@ -1,0 +1,41 @@
+Running main() from /home/matthewlee/benchmark-platform/engine/build/release/_deps/googletest-src/googletest/src/gtest_main.cc
+[==========] Running 16 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 16 tests from Cache
+[ RUN      ] Cache.ColdModeNamesRoundTrip
+[       OK ] Cache.ColdModeNamesRoundTrip (0 ms)
+[ RUN      ] Cache.ColdEffectNames
+[       OK ] Cache.ColdEffectNames (0 ms)
+[ RUN      ] Cache.FlushHandlesAnyRegionShape
+[       OK ] Cache.FlushHandlesAnyRegionShape (0 ms)
+[ RUN      ] Cache.ClflushoptDetectionIsStable
+[       OK ] Cache.ClflushoptDetectionIsStable (0 ms)
+[ RUN      ] Cache.EvictBufferIsTwiceTheLlc
+[       OK ] Cache.EvictBufferIsTwiceTheLlc (0 ms)
+[ RUN      ] Cache.EvictReadsTheWholeBuffer
+[       OK ] Cache.EvictReadsTheWholeBuffer (3 ms)
+[ RUN      ] Cache.SmallBufferIsPageAlignedAndZeroed
+[       OK ] Cache.SmallBufferIsPageAlignedAndZeroed (0 ms)
+[ RUN      ] Cache.LargeBufferIsHugePageAligned
+[       OK ] Cache.LargeBufferIsHugePageAligned (57 ms)
+[ RUN      ] Cache.HugePagesCanBeDeclined
+[       OK ] Cache.HugePagesCanBeDeclined (1 ms)
+[ RUN      ] Cache.EmptyBufferIsUsable
+[       OK ] Cache.EmptyBufferIsUsable (0 ms)
+[ RUN      ] Cache.BufferMovesWithoutLeakingOrDoubleFreeing
+[       OK ] Cache.BufferMovesWithoutLeakingOrDoubleFreeing (0 ms)
+[ RUN      ] Cache.SmapsReportsNothingForAStackAddress
+[       OK ] Cache.SmapsReportsNothingForAStackAddress (0 ms)
+[ RUN      ] Cache.ColdPrepDecidesWhatIsActuallyPossible
+[       OK ] Cache.ColdPrepDecidesWhatIsActuallyPossible (5 ms)
+[ RUN      ] Cache.ColdPrepReportsTheBytesItTouches
+[       OK ] Cache.ColdPrepReportsTheBytesItTouches (6 ms)
+[ RUN      ] Cache.ColdPrepIsIdempotentAndReusable
+[       OK ] Cache.ColdPrepIsIdempotentAndReusable (13 ms)
+[ RUN      ] Cache.ColdPrepIsPerThread
+[       OK ] Cache.ColdPrepIsPerThread (4 ms)
+[----------] 16 tests from Cache (94 ms total)
+
+[----------] Global test environment tear-down
+[==========] 16 tests from 1 test suite ran. (94 ms total)
+[  PASSED  ] 16 tests.

@@ -1,0 +1,34 @@
+# Ten consecutive runs of the two ratio tests (Verify 1 and Verify 2), to show how
+# reliably each mechanism cools the cache and how much of the spread is the machine.
+# Release build, plugged in, Balanced / Best power efficiency, 2026-09-19.
+
+run 1:
+clflush 256 KiB    n=41  warm   3.65  cold p5 104.10 / med  109.52 / p95  120.02 ns/load   ratio  29.97x (per-rep 21.13x.. 37.56x)  require >= 5.0x
+evict 48 MiB       n=41  warm   6.98  cold p5  92.68 / med  112.49 / p95  147.07 ns/load   ratio  16.12x (per-rep  6.53x..593.67x)  require >= 3.0x
+run 2:
+clflush 256 KiB    n=41  warm   4.59  cold p5 103.20 / med  109.55 / p95  140.76 ns/load   ratio  23.89x (per-rep  1.52x.. 40.06x)  require >= 5.0x
+evict 48 MiB       n=41  warm   3.74  cold p5  56.35 / med   96.29 / p95  121.33 ns/load   ratio  25.78x (per-rep  7.36x.. 32.14x)  require >= 3.0x
+run 3:
+clflush 256 KiB    n=41  warm   3.65  cold p5  48.49 / med   64.62 / p95  133.11 ns/load   ratio  17.71x (per-rep  5.12x.. 40.10x)  require >= 5.0x
+evict 48 MiB       n=41  warm   4.86  cold p5  24.63 / med   45.71 / p95   98.07 ns/load   ratio   9.41x (per-rep  2.66x.. 22.97x)  require >= 3.0x
+run 4:
+clflush 256 KiB    n=41  warm   3.65  cold p5  48.38 / med   49.36 / p95   51.95 ns/load   ratio  13.52x (per-rep 12.42x.. 14.70x)  require >= 5.0x
+evict 48 MiB       n=41  warm   5.35  cold p5  49.40 / med   95.94 / p95  116.57 ns/load   ratio  17.93x (per-rep  1.99x.. 29.18x)  require >= 3.0x
+run 5:
+clflush 256 KiB    n=41  warm   3.65  cold p5 101.88 / med  106.89 / p95  150.10 ns/load   ratio  29.27x (per-rep  4.21x..582.49x)  require >= 5.0x
+evict 48 MiB       n=41  warm   3.73  cold p5  18.56 / med   56.29 / p95  107.43 ns/load   ratio  15.08x (per-rep  1.61x.. 70.06x)  require >= 3.0x
+run 6:
+clflush 256 KiB    n=41  warm   3.65  cold p5 103.48 / med  107.57 / p95  112.96 ns/load   ratio  29.47x (per-rep 13.62x.. 30.68x)  require >= 5.0x
+evict 48 MiB       n=41  warm   5.35  cold p5  40.64 / med   87.35 / p95  110.18 ns/load   ratio  16.33x (per-rep  0.48x..166.00x)  require >= 3.0x
+run 7:
+clflush 256 KiB    n=41  warm   6.98  cold p5 204.97 / med  217.45 / p95  237.89 ns/load   ratio  31.14x (per-rep  7.43x.. 67.32x)  require >= 5.0x
+evict 48 MiB       n=41  warm   5.35  cold p5  41.68 / med   88.30 / p95  122.77 ns/load   ratio  16.51x (per-rep  3.10x.. 44.41x)  require >= 3.0x
+run 8:
+clflush 256 KiB    n=41  warm   3.65  cold p5 102.05 / med  105.54 / p95  115.11 ns/load   ratio  28.93x (per-rep 19.58x.. 32.82x)  require >= 5.0x
+evict 48 MiB       n=41  warm   5.95  cold p5  87.63 / med  101.53 / p95  167.96 ns/load   ratio  17.08x (per-rep  3.96x.. 66.81x)  require >= 3.0x
+run 9:
+clflush 256 KiB    n=41  warm   3.65  cold p5  48.69 / med  103.82 / p95  126.63 ns/load   ratio  28.47x (per-rep 12.25x.. 32.97x)  require >= 5.0x
+evict 48 MiB       n=41  warm   4.34  cold p5  39.10 / med   80.90 / p95  132.48 ns/load   ratio  18.64x (per-rep  3.73x.. 46.97x)  require >= 3.0x
+run 10:
+clflush 256 KiB    n=41  warm   5.02  cold p5 102.20 / med  110.17 / p95  127.60 ns/load   ratio  21.96x (per-rep  3.56x.. 32.68x)  require >= 5.0x
+evict 48 MiB       n=41  warm   4.33  cold p5  25.41 / med   57.06 / p95  111.97 ns/load   ratio  13.17x (per-rep  5.35x.. 31.88x)  require >= 3.0x

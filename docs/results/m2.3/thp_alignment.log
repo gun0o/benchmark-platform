@@ -1,0 +1,6 @@
+# Does the 2 MiB alignment / MADV_HUGEPAGE actually matter? 48 MiB anonymous mapping,
+# WSL2, THP policy = madvise. AnonHugePages read back from /proc/self/smaps.
+2MiB-aligned + MADV_HUGEPAGE       base%2MiB=      0  granted   48 MiB of 48
+2MiB-aligned, no madvise           base%2MiB=      0  granted    0 MiB of 48
+unaligned + MADV_HUGEPAGE          base%2MiB=   4096  granted   46 MiB of 48
+unaligned, no madvise              base%2MiB=   4096  granted    0 MiB of 48

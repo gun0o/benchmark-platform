@@ -1,5 +1,6 @@
 #include "bench/runner.hpp"
 
+#include "bench/cache.hpp"
 #include "bench/stats.hpp"
 #include "bench/sync.hpp"
 #include "bench/timing.hpp"
@@ -70,6 +71,7 @@ std::atomic<bool> g_abort{false};
 struct alignas(128) Slot {
     std::uint64_t ops = 0;
     std::uint64_t batches = 0;
+    std::uint64_t cold_ns = 0; // cost of the previous trial's cold prep, published after release
     Clock::time_point start{};
     Clock::time_point end{};
     int cpu_start = -1; // sched_getcpu() right after the start barrier releases
@@ -89,6 +91,13 @@ struct WorkerFailure {
     std::string message;
 };
 
+// What cold preparation turned out to be for this configuration, published by worker 0.
+struct ColdReport {
+    std::atomic<ColdEffect> effect{ColdEffect::none};
+    std::atomic<std::size_t> bytes{0};
+    std::atomic<std::uint64_t> huge_bytes{0};
+};
+
 int pin_current_thread(int cpu) noexcept {
     cpu_set_t set;
     CPU_ZERO(&set);
@@ -98,18 +107,31 @@ int pin_current_thread(int cpu) noexcept {
 
 template <WorkloadImpl W>
 void worker(std::stop_token st, int index, const RunConfig& cfg, std::uint64_t working_set,
-            SpinBarrier& start_b, SpinBarrier& end_b, std::latch& ready, Slot& slot,
-            WorkerFailure& failure) {
+            int l3_kb, SpinBarrier& start_b, SpinBarrier& end_b, std::latch& ready, Slot& slot,
+            WorkerFailure& failure, ColdReport& report) {
     if (slot.assigned_cpu >= 0)
         slot.pin_errno = pin_current_thread(slot.assigned_cpu);
 
     W w;
+    ColdPrep cold;
     bool ok = true;
     try {
         // Allocation and first-touch happen here, on the worker's own thread, never inside
         // the timed region.
         w.setup(WorkloadContext{
             .thread_index = index, .working_set_bytes = working_set, .seed = cfg.seed});
+        // Cold prep is set up after the workload, because what it has to do depends on how
+        // big the workload's region turned out to be. Its own buffer (evict mode) is
+        // allocated and first-touched here, on this thread, never in the trial loop.
+        cold.setup(cfg.cold, l3_kb, w.cold_region().size());
+        // Every worker computes the same answer from the same inputs, but only a worker can
+        // compute it at all (it depends on the size of its own region), so worker 0
+        // publishes it for the main thread to put in params.cold.
+        if (index == 0) {
+            report.effect.store(cold.effect(), std::memory_order_relaxed);
+            report.bytes.store(cold.bytes(), std::memory_order_relaxed);
+            report.huge_bytes.store(cold.scratch().huge_granted_bytes(), std::memory_order_relaxed);
+        }
     } catch (const std::exception& e) {
         ok = false;
         std::lock_guard lock{failure.mu};
@@ -121,14 +143,24 @@ void worker(std::stop_token st, int index, const RunConfig& cfg, std::uint64_t w
     // Workers do not know how many trials there will be: the main thread decides warmup vs
     // timed per trial and ends the loop by requesting stop before its final arrival.
     const auto trial_len = std::chrono::milliseconds(cfg.trial_ms);
+    std::uint64_t cold_ns = 0;
     for (;;) {
-        // (M2.3: cold-cache preparation goes here, before the barrier.)
+        // Cold preparation, then nothing else before the barrier. Anything touched after
+        // the flush can pull the flushed lines (or, via a prefetcher, their neighbours)
+        // straight back in. The barrier itself only touches the barrier's own cache lines.
+        if (ok) {
+            const auto c0 = Clock::now();
+            cold.prepare(w.cold_region());
+            cold_ns = ns_between(c0, Clock::now());
+        }
         start_b.arrive_and_wait();
         if (st.stop_requested())
             break; // main requested stop before arriving: consistent view
 
         // Every write to `slot` happens between the start and end barriers, so the main
         // thread's reads after the end barrier never race with the next trial's writes.
+        // cold_ns is measured before the barrier but published here for that reason.
+        slot.cold_ns = cold_ns;
         slot.cpu_start = sched_getcpu();
         std::uint64_t ops = 0, batches = 0;
         const auto t0 = Clock::now();
@@ -156,7 +188,7 @@ enum class StopReason { none, aborted, timed_out };
 
 template <WorkloadImpl W>
 StopReason run_config(const RunConfig& cfg, Workload kind, Metric metric, int n_threads,
-                      std::uint64_t working_set, const ClockCheck& clock,
+                      std::uint64_t working_set, int l3_kb, const ClockCheck& clock,
                       const std::vector<int>& cpu_list, Clock::time_point deadline,
                       RunEnvelope& out, const ProgressFn& progress) {
     Clock::time_point t_release{}, t_done{};
@@ -165,6 +197,7 @@ StopReason run_config(const RunConfig& cfg, Workload kind, Metric metric, int n_
     std::latch ready(n_threads);
     std::vector<Slot> slots(static_cast<std::size_t>(n_threads));
     WorkerFailure failure;
+    ColdReport cold_report;
 
     std::vector<int> assigned;
     for (int i = 0; i < n_threads; ++i) {
@@ -177,9 +210,10 @@ StopReason run_config(const RunConfig& cfg, Workload kind, Metric metric, int n_
     std::vector<std::jthread> threads;
     threads.reserve(static_cast<std::size_t>(n_threads));
     for (int i = 0; i < n_threads; ++i)
-        threads.emplace_back(worker<W>, i, std::cref(cfg), working_set, std::ref(start_b),
+        threads.emplace_back(worker<W>, i, std::cref(cfg), working_set, l3_kb, std::ref(start_b),
                              std::ref(end_b), std::ref(ready),
-                             std::ref(slots[static_cast<std::size_t>(i)]), std::ref(failure));
+                             std::ref(slots[static_cast<std::size_t>(i)]), std::ref(failure),
+                             std::ref(cold_report));
     auto stop_workers = [&] {
         for (auto& th : threads)
             th.request_stop();
@@ -230,13 +264,15 @@ StopReason run_config(const RunConfig& cfg, Workload kind, Metric metric, int n_
         else
             ++timed_done;
 
-        std::uint64_t total_ops = 0;
+        std::uint64_t total_ops = 0, cold_ns_sum = 0, cold_ns_max = 0;
         auto first_start = slots[0].start, last_start = slots[0].start;
         json per_thread_ops = json::array(), per_thread_cpu = json::array(),
              per_thread_start_us = json::array();
         int pin_violations = 0, pin_failures = 0;
         for (const Slot& s : slots) {
             total_ops += s.ops;
+            cold_ns_sum += s.cold_ns;
+            cold_ns_max = std::max(cold_ns_max, s.cold_ns);
             first_start = std::min(first_start, s.start);
             last_start = std::max(last_start, s.start);
             const auto own_ns = ns_between(s.start, s.end);
@@ -263,8 +299,18 @@ StopReason run_config(const RunConfig& cfg, Workload kind, Metric metric, int n_
         r.trial = warmup ? -warmups_done : timed_done - 1; // negative while warming up
         r.timestamp = utc_now_rfc3339();
         r.duration_ns = ns == 0 ? 1 : ns;
+        const auto effect = cold_report.effect.load(std::memory_order_relaxed);
         r.params = json{
-            {"cold", "none"},
+            // What actually happened, then what was asked for: they differ when the region
+            // could not have been cache-resident in the first place ("n/a").
+            {"cold", to_string(effect)},
+            {"cold_requested", to_string(cfg.cold)},
+            {"cold_bytes", cold_report.bytes.load(std::memory_order_relaxed)},
+            {"cold_prep_mean_us",
+             static_cast<double>(cold_ns_sum) / static_cast<double>(n_threads) / 1e3},
+            {"cold_prep_max_us", static_cast<double>(cold_ns_max) / 1e3},
+            {"huge_pages", cold_report.huge_bytes.load(std::memory_order_relaxed) > 0},
+            {"huge_page_bytes", cold_report.huge_bytes.load(std::memory_order_relaxed)},
             {"pinned", cfg.pin},
             {"cpus", assigned},
             {"warmup_trials", cfg.warmup_trials},
@@ -394,7 +440,8 @@ RunEnvelope run_benchmarks(const RunConfig& cfg, const MachineInfo& machine,
                 switch (kind) {
                 case Workload::cpu_int:
                     stop = run_config<CpuIntWorkload>(cfg, kind, Metric::cpu_int_ops, threads, ws,
-                                                      clock, cpu_list, deadline, run, progress);
+                                                      machine.l3_kb, clock, cpu_list, deadline, run,
+                                                      progress);
                     break;
                 default:
                     throw std::runtime_error(

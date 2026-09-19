@@ -1,4 +1,5 @@
 // bench CLI: sysinfo | list | run | validate
+#include "bench/cache.hpp"
 #include "bench/result.hpp"
 #include "bench/runner.hpp"
 #include "bench/sysinfo.hpp"
@@ -133,6 +134,11 @@ int main(int argc, char** argv) {
                     "Safety cap on total run time; stops at a trial boundary (0 = no cap)")
         ->default_val(0)
         ->check(CLI::NonNegativeNumber);
+    std::string cold_str = "clflush";
+    run->add_option("--cold", cold_str,
+                    "Per-trial cache preparation before the barrier: clflush | evict | none")
+        ->default_str("clflush")
+        ->check(CLI::IsMember({"clflush", "evict", "none"}));
     std::string cpus_csv;
     bool pin = false;
     run->add_flag("--pin", pin,
@@ -162,6 +168,7 @@ int main(int argc, char** argv) {
         for (const auto& s : split_csv(ws_csv))
             cfg.working_sets.push_back(parse_size(s));
         cfg.verbose = verbose;
+        cfg.cold = bench::parse_cold_mode(cold_str).value(); // CLI11 already restricted it
         cfg.pin = pin;
         for (const auto& c : split_csv(cpus_csv))
             cfg.cpus.push_back(std::stoi(c));
@@ -181,12 +188,15 @@ int main(int argc, char** argv) {
                 if (!cpus.empty())
                     cpus.pop_back();
                 std::cerr << std::format("{:<8} t={:<3} {}={:<4} {:>14.0f} {}  {:.2f} ms  "
-                                         "spread={:.1f}us  pinviol={} cpus=[{}]\n",
+                                         "spread={:.1f}us  cold={}/{:.1f}us  pinviol={} "
+                                         "cpus=[{}]\n",
                                          bench::to_string(r.workload), r.thread_count,
                                          warmup ? "warmup" : "trial ", warmup ? -r.trial : r.trial,
                                          r.value, bench::to_string(bench::unit_of(r.metric)),
                                          static_cast<double>(r.duration_ns) / 1e6,
                                          r.params["start_spread_us"].get<double>(),
+                                         r.params["cold"].get<std::string>(),
+                                         r.params["cold_prep_max_us"].get<double>(),
                                          r.params["pin_violations"].get<int>(), cpus);
             };
         const auto envelope = bench::run_benchmarks(cfg, machine, std::move(argv_copy), progress);
