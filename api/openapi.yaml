@@ -39,11 +39,40 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Readiness" }
   /v1/runs:
+    get:
+      summary: List run headers, newest first.
+      operationId: listRuns
+      parameters:
+        - { name: machine_id, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 100 } }
+      responses:
+        "200":
+          description: run headers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [runs]
+                properties:
+                  runs:
+                    type: array
+                    items: { $ref: "#/components/schemas/Run" }
+        "400":
+          description: bad limit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
     post:
       summary: Ingest one run envelope.
       description: |
-        Idempotent on `run_id`: a run already stored is a no-op and reports
-        `inserted: 0, duplicate: true`. The machine block is upserted by `machine.id`.
+        Idempotent per measurement row: `(run_id, metric, thread_count,
+        working_set_bytes, trial)` is unique, so re-POSTing a run (or a chunk of one)
+        stores nothing new and reports it under `skipped`. A run larger than
+        `results`'s limit is split by the client into several POSTs that share one
+        `run_id`; they append. The machine block is upserted by `machine.id`.
+
+        The body is decoded as it is read, so the request is bounded by the ingest rate
+        rather than by memory.
       operationId: ingestRun
       requestBody:
         required: true
@@ -63,6 +92,56 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "413":
           description: more results than one envelope may carry
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/machines:
+    get:
+      summary: Every machine that has ever posted a run, newest sighting first.
+      operationId: listMachines
+      responses:
+        "200":
+          description: the machine inventory
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [machines]
+                properties:
+                  machines:
+                    type: array
+                    items: { $ref: "#/components/schemas/MachineRow" }
+  /v1/machines/{id}:
+    get:
+      summary: One machine by its content-addressed id.
+      operationId: getMachine
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: the machine
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MachineRow" }
+        "404":
+          description: no such machine
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/runs/{id}:
+    get:
+      summary: One run header with its measurement count.
+      operationId: getRun
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: the run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "404":
+          description: no such run
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -177,12 +256,38 @@ components:
         summary: { type: array, items: { $ref: "#/components/schemas/Summary" } }
     IngestResult:
       type: object
-      required: [run_id, inserted]
+      required: [run_id, results, inserted, skipped, duplicate]
       properties:
         run_id: { type: string }
-        inserted: { type: integer }
-        duplicate: { type: boolean }
+        results: { type: integer, description: Results carried by this request. }
+        inserted: { type: integer, description: Rows actually written. }
+        skipped: { type: integer, description: Rows already present (a repeated chunk). }
+        duplicate: { type: boolean, description: Nothing in this request was new. }
         machine_id: { type: string }
+    MachineRow:
+      allOf:
+        - $ref: "#/components/schemas/Machine"
+        - type: object
+          required: [first_seen, last_seen]
+          properties:
+            first_seen: { type: string, format: date-time }
+            last_seen: { type: string, format: date-time }
+            runs: { type: integer }
+            measurements: { type: integer }
+    Run:
+      type: object
+      required: [id, machine_id, engine_version, engine_git_sha, started_at, finished_at,
+                 argv, ingested_at]
+      properties:
+        id: { type: string, format: uuid }
+        machine_id: { type: string }
+        engine_version: { type: string }
+        engine_git_sha: { type: string }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+        argv: { type: array, items: { type: string } }
+        ingested_at: { type: string, format: date-time }
+        measurements: { type: integer }
     Measurement:
       type: object
       required: [id, run_id, machine_id, workload, metric, thread_count,

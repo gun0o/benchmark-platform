@@ -1,0 +1,40 @@
+# M5.1 verify — 2026-09-21T19:40:39Z
+
+## Ingest of a 50,000-result envelope (17.0 MB of JSON) over HTTP
+
+$ time curl -sS -X POST localhost:8080/v1/runs --data-binary @big.json
+{"run_id":"99999999-aaaa-4bbb-8ccc-dddddddddddd","results":50000,"inserted":50000,"skipped":0,"duplicate":false,"machine_id":"7fea9ecafd05d7a64f0fcd74cf35f695"}
+real 2.05 s
+
+$ time curl ... (again: the whole run is already stored)
+{"run_id":"99999999-aaaa-4bbb-8ccc-dddddddddddd","results":50000,"inserted":0,"skipped":50000,"duplicate":true,"machine_id":"7fea9ecafd05d7a64f0fcd74cf35f695"}
+real 0.91 s
+
+$ psql -tAc 'select count(*) from measurements'
+50023
+
+## The API's own log line (duration, request id, rows)
+{"time":"2026-09-21T14:40:41.866329943-05:00","level":"INFO","msg":"ingested run","run_id":"99999999-aaaa-4bbb-8ccc-dddddddddddd","machine_id":"7fea9ecafd05d7a64f0fcd74cf35f695","results":50000,"inserted":50000,"skipped":0,"duplicate":false,"request_id":"f7c50c74206912e3"}
+{"time":"2026-09-21T14:40:42.78458496-05:00","level":"INFO","msg":"ingested run","run_id":"99999999-aaaa-4bbb-8ccc-dddddddddddd","machine_id":"7fea9ecafd05d7a64f0fcd74cf35f695","results":50000,"inserted":0,"skipped":50000,"duplicate":true,"request_id":"313c7c51993ba4bc"}
+
+## 50,001 results is refused, not truncated
+
+$ curl -sS -X POST localhost:8080/v1/runs --data-binary @toobig.json
+{"error":{"code":"too_many_results","message":"a run envelope may carry at most 50000 results; chunk the run"}}
+ (HTTP 413)
+
+## The same POST under synchronous_commit=off (the M5.4 load-test profile),
+## with the API restarted so the pool's sessions pick the setting up
+
+$ psql -tAc 'show synchronous_commit'
+off
+$ time curl -sS -X POST localhost:8080/v1/runs --data-binary @big3.json   # fresh run_id
+{"run_id":"99999999-aaaa-4bbb-8ccc-ffffffffffff","results":50000,"inserted":50000,"skipped":0,"duplicate":false,"machine_id":"7fea9ecafd05d7a64f0fcd74cf35f695"}
+real 2.08 s
+
+## Where the time goes: the same 50,000 rows written entirely inside Postgres,
+## with no client, no HTTP and no JSON
+
+$ psql -c "INSERT INTO measurements (...) SELECT ... FROM generate_series(1000000, 1050000)"
+INSERT 0 50001
+Time: 1428.686 ms (00:01.429)

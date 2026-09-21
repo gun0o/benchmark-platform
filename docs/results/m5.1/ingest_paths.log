@@ -1,0 +1,11 @@
+$ go test -tags integration -run IngestPathTimings -v ./internal/store/
+    ingest_paths_test.go:173: 50,000 measurement rows into Postgres 16 (compose, synchronous_commit=on):
+    ingest_paths_test.go:177:   row-by-row INSERT (5000 rows)                      1.127s       4437 rows/s
+    ingest_paths_test.go:181:                                                      11.27s  (extrapolated to 50000 rows)
+    ingest_paths_test.go:177:   CopyFrom, one batch (50000 rows)                   1.823s      27435 rows/s
+    ingest_paths_test.go:177:   CopyFrom, 10K batches (50000 rows)                 1.879s      26611 rows/s
+    ingest_paths_test.go:177:   temp table + ON CONFLICT, 10K batches (50000 rows)   2.588s      19323 rows/s
+    ingest_paths_test.go:177:   CopyFrom, 10K batches, params NULL (50000 rows)    1.853s      26984 rows/s
+    ingest_paths_test.go:177:   CopyFrom, 10K batches, no indexes (50000 rows)     1.593s      31395 rows/s
+--- PASS: TestIngestPathTimings (11.08s)
+ok  	github.com/matthewlee/benchmark-platform/api/internal/store	11.087s

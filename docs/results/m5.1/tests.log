@@ -1,0 +1,71 @@
+$ go test ./...
+?   	github.com/matthewlee/benchmark-platform/api/cmd/api	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/cmd/migrate	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/internal/config	[no test files]
+ok  	github.com/matthewlee/benchmark-platform/api/internal/http	0.006s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/model	0.224s
+?   	github.com/matthewlee/benchmark-platform/api/internal/store	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/migrations	[no test files]
+
+$ go test -tags integration ./...
+?   	github.com/matthewlee/benchmark-platform/api/cmd/api	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/cmd/migrate	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/internal/config	[no test files]
+ok  	github.com/matthewlee/benchmark-platform/api/internal/http	0.006s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/model	0.230s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/store	13.744s
+?   	github.com/matthewlee/benchmark-platform/api/migrations	[no test files]
+
+$ go vet ./... && gofmt -l .
+(clean)
+
+$ go test -tags integration -v ./internal/store/ | grep PASS
+    ingest_paths_test.go:173: 50,000 measurement rows into Postgres 16 (compose, synchronous_commit=on):
+    ingest_paths_test.go:177:   row-by-row INSERT (5000 rows)                      1.108s       4514 rows/s
+    ingest_paths_test.go:181:                                                     11.078s  (extrapolated to 50000 rows)
+    ingest_paths_test.go:177:   CopyFrom, one batch (50000 rows)                   1.775s      28168 rows/s
+    ingest_paths_test.go:177:   CopyFrom, 10K batches (50000 rows)                 1.804s      27711 rows/s
+    ingest_paths_test.go:177:   temp table + ON CONFLICT, 10K batches (50000 rows)    2.57s      19458 rows/s
+    ingest_paths_test.go:177:   CopyFrom, 10K batches, params NULL (50000 rows)    1.803s      27732 rows/s
+    ingest_paths_test.go:177:   CopyFrom, 10K batches, no indexes (50000 rows)     1.501s      33307 rows/s
+--- PASS: TestIngestPathTimings (10.76s)
+--- PASS: TestIngestRoundTrip (0.08s)
+--- PASS: TestIngestIsIdempotentOnRunID (0.08s)
+--- PASS: TestMachineUpsertKeepsFirstSeen (0.08s)
+--- PASS: TestKeysetPaginationCoversEveryRowExactlyOnce (0.09s)
+--- PASS: TestFiltersNarrowAsAdvertised (0.08s)
+--- PASS: TestStreamIngestMatchesTheDecodedPath (0.09s)
+--- PASS: TestChunkedIngestAppendsAndRepeatsAreNoOps (0.09s)
+--- PASS: TestSelfDuplicatingEnvelopeIsStoredOnce (0.08s)
+--- PASS: TestStreamIngestRejectsOversizeAndBadDocuments (0.07s)
+    integration_test.go:451: 50,000 results (12.0 MB of JSON) ingested in 1.641s (30473 rows/s)
+--- PASS: TestLargeEnvelopeIngestTime (1.78s)
+
+$ go test -v ./internal/http ./internal/model | grep PASS
+--- PASS: TestMachinesEndpoints (0.00s)
+--- PASS: TestRunsEndpoints (0.00s)
+--- PASS: TestIngestAcceptsExampleAndIsIdempotent (0.00s)
+--- PASS: TestIngestRejections (0.00s)
+--- PASS: TestIngestRefusesOversizeEnvelope (0.00s)
+--- PASS: TestIngestStoreFailureIs500 (0.00s)
+--- PASS: TestMeasurementFilterParsing (0.00s)
+--- PASS: TestListReturnsCursorOnlyWhenPageIsFull (0.00s)
+--- PASS: TestHealthzAndReadyz (0.00s)
+--- PASS: TestMethodNotAllowed (0.00s)
+--- PASS: TestRequestIDIsEchoedOrMinted (0.00s)
+--- PASS: TestGzipWhenAskedAndOnlyThen (0.00s)
+--- PASS: TestRecoveryTurnsAPanicIntoA500 (0.00s)
+--- PASS: TestHandlerDeadlineReachesTheHandler (0.00s)
+--- PASS: TestEnumsMatchSchema (0.00s)
+--- PASS: TestMetricPairingsMatchSchema (0.00s)
+--- PASS: TestStreamDecodesTheRealEngineRun (0.00s)
+--- PASS: TestStreamGivesTheHeaderBeforeAnyResult (0.00s)
+--- PASS: TestStreamHandlesResultsBeforeTheHeader (0.00s)
+--- PASS: TestStreamRejections (0.00s)
+--- PASS: TestStreamAgreesWithValidate (0.01s)
+--- PASS: TestRetainedHeap (0.19s)
+--- PASS: TestExampleRunValidates (0.00s)
+--- PASS: TestGoValidatorAgreesWithJSONSchema (0.00s)
+--- PASS: TestValidateReportsEveryProblem (0.00s)
+--- PASS: TestParseTimestamp (0.00s)
+--- PASS: TestRealEngineRunDecodesStrictly (0.00s)

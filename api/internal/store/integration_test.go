@@ -7,8 +7,10 @@
 package store_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -297,4 +299,159 @@ func syntheticEnvelope(runID string, n int) *model.RunEnvelope {
 		})
 	}
 	return env
+}
+
+// --- M5.1 -----------------------------------------------------------------------------
+
+// envelopeJSON re-serializes a fixture so it can go through the streaming path, which is
+// what the HTTP handler uses.
+func envelopeJSON(t *testing.T, env *model.RunEnvelope) []byte {
+	t.Helper()
+	b, err := json.Marshal(env)
+	if err != nil {
+		t.Fatalf("marshal envelope: %v", err)
+	}
+	return b
+}
+
+func TestStreamIngestMatchesTheDecodedPath(t *testing.T) {
+	ctx := context.Background()
+	s := newStore(t)
+	env := syntheticEnvelope("22222222-3333-4444-8555-666666666666", 500)
+
+	res, err := s.IngestStream(ctx, bytes.NewReader(envelopeJSON(t, env)), 50_000)
+	if err != nil {
+		t.Fatalf("ingest stream: %v", err)
+	}
+	if res.Inserted != 500 || res.Results != 500 || res.Skipped != 0 || res.Duplicate {
+		t.Fatalf("%+v, want 500 inserted", res)
+	}
+	n, err := s.CountMeasurements(ctx, store.MeasurementFilter{})
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 500 {
+		t.Fatalf("count %d, want 500", n)
+	}
+}
+
+// A run larger than one POST arrives as several envelopes sharing a run_id. They must
+// append, not collide, and a chunk sent twice must add nothing.
+func TestChunkedIngestAppendsAndRepeatsAreNoOps(t *testing.T) {
+	ctx := context.Background()
+	s := newStore(t)
+	full := syntheticEnvelope("33333333-4444-4555-8666-777777777777", 300)
+
+	chunk := func(from, to int) []byte {
+		part := *full
+		part.Results = full.Results[from:to]
+		return envelopeJSON(t, &part)
+	}
+
+	first, err := s.IngestStream(ctx, bytes.NewReader(chunk(0, 100)), 50_000)
+	if err != nil {
+		t.Fatalf("chunk 1: %v", err)
+	}
+	if first.Inserted != 100 || first.Duplicate {
+		t.Fatalf("chunk 1: %+v", first)
+	}
+	second, err := s.IngestStream(ctx, bytes.NewReader(chunk(100, 300)), 50_000)
+	if err != nil {
+		t.Fatalf("chunk 2: %v", err)
+	}
+	if second.Inserted != 200 || second.Skipped != 0 || second.Duplicate {
+		t.Fatalf("chunk 2: %+v, want 200 appended", second)
+	}
+	// Re-sending the first chunk (the client did not see the reply) adds nothing.
+	repeat, err := s.IngestStream(ctx, bytes.NewReader(chunk(0, 100)), 50_000)
+	if err != nil {
+		t.Fatalf("repeat: %v", err)
+	}
+	if repeat.Inserted != 0 || repeat.Skipped != 100 || !repeat.Duplicate {
+		t.Fatalf("repeat: %+v, want 0 inserted / 100 skipped / duplicate", repeat)
+	}
+
+	n, err := s.CountMeasurements(ctx, store.MeasurementFilter{})
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 300 {
+		t.Fatalf("count %d after three POSTs of a 300-result run, want 300", n)
+	}
+}
+
+// An envelope that repeats a configuration inside itself must not abort the transaction:
+// the fast path hits the unique index, rolls back to its savepoint and re-runs the batch
+// through the conflict-aware path.
+func TestSelfDuplicatingEnvelopeIsStoredOnce(t *testing.T) {
+	ctx := context.Background()
+	s := newStore(t)
+	env := syntheticEnvelope("44444444-5555-4666-8777-888888888888", 20)
+	env.Results = append(env.Results, env.Results[0], env.Results[1])
+
+	res, err := s.IngestStream(ctx, bytes.NewReader(envelopeJSON(t, env)), 50_000)
+	if err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+	if res.Results != 22 || res.Inserted != 20 || res.Skipped != 2 {
+		t.Fatalf("%+v, want 22 posted / 20 inserted / 2 skipped", res)
+	}
+	n, _ := s.CountMeasurements(ctx, store.MeasurementFilter{})
+	if n != 20 {
+		t.Fatalf("count %d, want 20", n)
+	}
+}
+
+func TestStreamIngestRejectsOversizeAndBadDocuments(t *testing.T) {
+	ctx := context.Background()
+	s := newStore(t)
+	env := syntheticEnvelope("55555555-6666-4777-8888-999999999999", 10)
+
+	_, err := s.IngestStream(ctx, bytes.NewReader(envelopeJSON(t, env)), 5)
+	var tooMany *model.TooManyResultsError
+	if !errors.As(err, &tooMany) {
+		t.Fatalf("err %v, want TooManyResultsError", err)
+	}
+
+	bad := syntheticEnvelope("66666666-7777-4888-8999-aaaaaaaaaaaa", 4)
+	bad.Results[2].Metric = "cpu_vibes"
+	_, err = s.IngestStream(ctx, bytes.NewReader(envelopeJSON(t, bad)), 50_000)
+	var ve *model.ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("err %v, want ValidationError", err)
+	}
+	// A rejected document leaves nothing behind, not even the rows that preceded the bad
+	// one, because the whole ingest is one transaction.
+	n, _ := s.CountMeasurements(ctx, store.MeasurementFilter{})
+	if n != 0 {
+		t.Fatalf("count %d after two rejected POSTs, want 0", n)
+	}
+	runs, _ := s.ListRuns(ctx, "", 10)
+	if len(runs) != 0 {
+		t.Fatalf("%d runs after two rejected POSTs, want 0", len(runs))
+	}
+}
+
+// Target for M5.1: a 50,000-result envelope ingests in under 2 seconds.
+func TestLargeEnvelopeIngestTime(t *testing.T) {
+	ctx := context.Background()
+	s := newStore(t)
+	env := syntheticEnvelope("77777777-8888-4999-8aaa-bbbbbbbbbbbb", 50_000)
+	raw := envelopeJSON(t, env)
+
+	start := time.Now()
+	res, err := s.IngestStream(ctx, bytes.NewReader(raw), 50_000)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+	if res.Inserted != 50_000 {
+		t.Fatalf("%+v, want 50000 inserted", res)
+	}
+	t.Logf("50,000 results (%.1f MB of JSON) ingested in %v (%.0f rows/s)",
+		float64(len(raw))/1e6, elapsed.Round(time.Millisecond),
+		50_000/elapsed.Seconds())
+	if elapsed > 2*time.Second {
+		t.Fatalf("ingest took %v, target is under 2 s", elapsed)
+	}
 }

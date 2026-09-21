@@ -8,6 +8,7 @@
 #include "bench/workloads/disk_io.hpp"
 
 #include <CLI/CLI.hpp>
+#include <algorithm>
 #include <charconv>
 #include <csignal>
 #include <cstdio>
@@ -73,7 +74,13 @@ int write_json(const bench::json& j, const std::string& out_path, bool pretty) {
 
 // POST the envelope and print what came back. The run is already written to --out by the
 // time this runs, so a failure here costs the report, never the measurements.
-int post_envelope(const bench::json& j, const std::string& url_str, int timeout_ms) {
+//
+// A run with more results than the API accepts in one request is split into several POSTs
+// that share its run_id and machine block. The API resolves the repetition per row, so a
+// chunk that is sent twice adds nothing, and a run that is half uploaded can be completed
+// by posting it again.
+int post_envelope(const bench::json& j, const std::string& url_str, int timeout_ms,
+                  std::size_t chunk_results) {
     bench::Url url;
     try {
         url = bench::parse_url(url_str);
@@ -84,20 +91,46 @@ int post_envelope(const bench::json& j, const std::string& url_str, int timeout_
     if (url.path.empty() || url.path == "/")
         url.path = "/v1/runs";
 
-    const std::string body = j.dump();
-    const auto res = bench::post_json(url, body, timeout_ms);
-    if (!res.error.empty()) {
-        std::cerr << std::format("bench: --post http://{}:{}{}: {}\n", url.host, url.port,
-                                 url.path, res.error);
-        return 1;
+    const auto& results = j.at("results");
+    const std::size_t total = results.size();
+    const std::size_t chunk = chunk_results == 0 ? total : chunk_results;
+    const std::size_t chunks = total == 0 ? 1 : (total + chunk - 1) / chunk;
+
+    int rc = 0;
+    for (std::size_t c = 0; c < chunks; ++c) {
+        bench::json part = j;
+        if (chunks > 1) {
+            const std::size_t begin = c * chunk;
+            const std::size_t end = std::min(begin + chunk, total);
+            part["results"] = bench::json::array();
+            for (std::size_t i = begin; i < end; ++i)
+                part["results"].push_back(results[i]);
+            // The summary describes the whole run, so it rides along with the first chunk
+            // only; sending it with every chunk would say the same thing several times.
+            if (c > 0)
+                part.erase("summary");
+        }
+        const std::string body = part.dump();
+        const auto res = bench::post_json(url, body, timeout_ms);
+        if (!res.error.empty()) {
+            std::cerr << std::format("bench: --post http://{}:{}{}: {}\n", url.host, url.port,
+                                     url.path, res.error);
+            return 1;
+        }
+        std::cerr << std::format("bench: POST http://{}:{}{} -> {} ({}{} results, {} bytes)\n",
+                                 url.host, url.port, url.path, res.status,
+                                 part["results"].size(),
+                                 chunks > 1 ? std::format(" of {}, chunk {}/{}", total, c + 1,
+                                                          chunks)
+                                            : std::string{},
+                                 body.size());
+        std::cout << res.body;
+        if (!res.body.empty() && res.body.back() != '\n')
+            std::cout << '\n';
+        if (!res.ok())
+            rc = 1;
     }
-    std::cerr << std::format("bench: POST http://{}:{}{} -> {} ({} results, {} bytes)\n",
-                             url.host, url.port, url.path, res.status, j["results"].size(),
-                             body.size());
-    std::cout << res.body;
-    if (!res.body.empty() && res.body.back() != '\n')
-        std::cout << '\n';
-    return res.ok() ? 0 : 1;
+    return rc;
 }
 
 } // namespace
@@ -136,6 +169,7 @@ int main(int argc, char** argv) {
     // ---- run -----------------------------------------------------------------------
     std::string workloads_csv, metrics_csv, threads_csv = "1", ws_csv = "0", out_path, post_url;
     int post_timeout_ms = 10000;
+    std::size_t post_chunk = 50000;
     bool all = false, run_pretty = false, verbose = false;
     bench::RunConfig cfg;
     auto* run = app.add_subcommand("run", "Run benchmarks and emit a run envelope");
@@ -218,6 +252,11 @@ int main(int argc, char** argv) {
                     "Per-operation timeout for --post (connect, send, receive)")
         ->default_val(10000)
         ->check(CLI::PositiveNumber);
+    run->add_option("--post-chunk", post_chunk,
+                    "Results per POST; a larger run is split into several requests that "
+                    "share its run_id (0 = never split). The API's limit is 50000")
+        ->default_val(50000)
+        ->check(CLI::NonNegativeNumber);
     run->add_flag("--pretty", run_pretty, "Indent JSON output");
     run->add_flag("-v,--verbose", verbose, "Print each result to stderr as it completes");
     run->callback([&] {
@@ -357,7 +396,7 @@ int main(int argc, char** argv) {
         if (!out_path.empty() || post_url.empty())
             rc = write_json(j, out_path, run_pretty);
         if (rc == 0 && !post_url.empty())
-            rc = post_envelope(j, post_url, post_timeout_ms);
+            rc = post_envelope(j, post_url, post_timeout_ms, post_chunk);
         std::exit(problems.empty() ? rc : 2);
     });
 

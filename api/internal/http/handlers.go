@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/matthewlee/benchmark-platform/api/internal/model"
 	"github.com/matthewlee/benchmark-platform/api/internal/store"
@@ -29,39 +31,56 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleIngestRun(w http.ResponseWriter, r *http.Request) {
-	var env model.RunEnvelope
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields() // strict decoding is half of the schema check
-	if err := dec.Decode(&env); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body is not a valid run envelope", err.Error())
-		return
-	}
-	if len(env.Results) > s.maxRes {
-		writeError(w, http.StatusRequestEntityTooLarge, "too_many_results",
-			fmt.Sprintf("a run envelope may carry at most %d results, got %d; chunk the run",
-				s.maxRes, len(env.Results)))
-		return
-	}
-	if err := env.Validate(); err != nil {
-		var ve *model.ValidationError
-		if errors.As(err, &ve) {
-			writeError(w, http.StatusBadRequest, "schema_violation",
-				"run envelope does not satisfy schema/benchmark-result.schema.json", ve.Problems...)
-			return
-		}
-		writeError(w, http.StatusBadRequest, "schema_violation", err.Error())
-		return
-	}
-
-	res, err := s.store.IngestRun(r.Context(), &env)
+	// The body is decoded as it is read and the results go to Postgres in batches, so a
+	// 50,000-result envelope never exists in memory as one object graph.
+	res, err := s.store.IngestStream(r.Context(), r.Body, s.maxRes)
 	if err != nil {
-		s.log.Error("ingest failed", "run_id", env.RunID, "err", err)
-		writeError(w, http.StatusInternalServerError, "ingest_failed", "could not store the run")
+		s.writeIngestError(w, err)
 		return
 	}
 	s.log.Info("ingested run", "run_id", res.RunID, "machine_id", res.MachineID,
-		"inserted", res.Inserted, "duplicate", res.Duplicate)
+		"results", res.Results, "inserted", res.Inserted, "skipped", res.Skipped,
+		"duplicate", res.Duplicate, "request_id", RequestID(r.Context()))
 	writeJSON(w, http.StatusOK, res)
+}
+
+// writeIngestError maps the three kinds of ingest failure onto status codes: a document
+// the API cannot parse, a document it parsed and rejected, and a database that failed.
+func (s *Server) writeIngestError(w http.ResponseWriter, err error) {
+	var tooMany *model.TooManyResultsError
+	if errors.As(err, &tooMany) {
+		writeError(w, http.StatusRequestEntityTooLarge, "too_many_results", tooMany.Error())
+		return
+	}
+	var ve *model.ValidationError
+	if errors.As(err, &ve) {
+		writeError(w, http.StatusBadRequest, "schema_violation",
+			"run envelope does not satisfy schema/benchmark-result.schema.json", ve.Problems...)
+		return
+	}
+	// A JSON syntax error, an unknown field, or a wrongly typed value: all of them are the
+	// client's document, not the server's state.
+	if isDecodeError(err) {
+		writeError(w, http.StatusBadRequest, "invalid_json",
+			"request body is not a valid run envelope", err.Error())
+		return
+	}
+	s.log.Error("ingest failed", "err", err)
+	writeError(w, http.StatusInternalServerError, "ingest_failed", "could not store the run")
+}
+
+func isDecodeError(err error) bool {
+	var syn *json.SyntaxError
+	var typ *json.UnmarshalTypeError
+	if errors.As(err, &syn) || errors.As(err, &typ) || errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	// encoding/json reports an unknown field and a few other shape problems as a plain
+	// error string; the decoder is the only thing in this path that produces them.
+	msg := err.Error()
+	return strings.Contains(msg, "unknown field") || strings.Contains(msg, "run envelope:") ||
+		strings.Contains(msg, "cannot unmarshal") || strings.Contains(msg, "invalid character")
 }
 
 func (s *Server) handleListMeasurements(w http.ResponseWriter, r *http.Request) {
@@ -131,4 +150,68 @@ func parseMeasurementFilter(r *http.Request) (store.MeasurementFilter, error) {
 		f.Cursor = n
 	}
 	return f, nil
+}
+
+func (s *Server) handleListMachines(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.store.ListMachines(r.Context())
+	if err != nil {
+		s.log.Error("list machines failed", "err", err)
+		writeError(w, http.StatusInternalServerError, "query_failed", "could not read machines")
+		return
+	}
+	if rows == nil {
+		rows = []model.MachineRow{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"machines": rows})
+}
+
+func (s *Server) handleGetMachine(w http.ResponseWriter, r *http.Request) {
+	m, err := s.store.GetMachine(r.Context(), r.PathValue("id"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "no such machine")
+		return
+	}
+	if err != nil {
+		s.log.Error("get machine failed", "err", err)
+		writeError(w, http.StatusInternalServerError, "query_failed", "could not read the machine")
+		return
+	}
+	writeJSON(w, http.StatusOK, m)
+}
+
+func (s *Server) handleListRuns(w http.ResponseWriter, r *http.Request) {
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 1000 {
+			writeError(w, http.StatusBadRequest, "invalid_query",
+				fmt.Sprintf("limit must be between 1 and 1000, got %q", v))
+			return
+		}
+		limit = n
+	}
+	rows, err := s.store.ListRuns(r.Context(), r.URL.Query().Get("machine_id"), limit)
+	if err != nil {
+		s.log.Error("list runs failed", "err", err)
+		writeError(w, http.StatusInternalServerError, "query_failed", "could not read runs")
+		return
+	}
+	if rows == nil {
+		rows = []model.Run{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runs": rows})
+}
+
+func (s *Server) handleGetRun(w http.ResponseWriter, r *http.Request) {
+	run, err := s.store.GetRun(r.Context(), r.PathValue("id"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "no such run")
+		return
+	}
+	if err != nil {
+		s.log.Error("get run failed", "err", err)
+		writeError(w, http.StatusInternalServerError, "query_failed", "could not read the run")
+		return
+	}
+	writeJSON(w, http.StatusOK, run)
 }

@@ -1,0 +1,16 @@
+$ go test -run RetainedHeap -bench . -benchmem -benchtime 5x -v ./internal/model/
+# A 50,000-result envelope: 13.6 MB of JSON.
+    validate_bench_test.go:189: 50000 results: whole-document decode retains 11.5 MB, streaming into 10K batches peaks at 2.3 MB (5.1x)
+goos: linux
+goarch: amd64
+pkg: github.com/matthewlee/benchmark-platform/api/internal/model
+cpu: Intel(R) Core(TM) Ultra 9 185H
+BenchmarkStrictDecodeAndValidate
+BenchmarkStrictDecodeAndValidate-22    	       5	  96920245 ns/op	 140.21 MB/s	91800464 B/op	  120031 allocs/op
+BenchmarkJSONSchemaValidate
+BenchmarkJSONSchemaValidate-22         	       5	 995816023 ns/op	  13.65 MB/s	901633328 B/op	18150418 allocs/op
+BenchmarkStreamDecodeAndValidate
+BenchmarkStreamDecodeAndValidate-22    	       5	  93466188 ns/op	 145.39 MB/s	19768686 B/op	  170005 allocs/op
+BenchmarkStreamDecodeIntoBatches
+BenchmarkStreamDecodeIntoBatches-22    	       5	  96326958 ns/op	 141.08 MB/s	21055964 B/op	  170011 allocs/op
+ok  	github.com/matthewlee/benchmark-platform/api/internal/model	8.060s

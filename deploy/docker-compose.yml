@@ -4,6 +4,23 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: bench-postgres
+    # M5.1 tuning. shared_buffers and work_mem are safe defaults for this box (16 GB, a
+    # 100K-row table with per-machine aggregates). synchronous_commit stays ON by default:
+    # turning it off trades durability for ingest throughput, so it belongs to the load
+    # test alone and must be an explicit choice. deploy/.env.loadtest sets it, and the k6
+    # notes record which profile produced which number.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-512MB}
+      - -c
+      - work_mem=${PG_WORK_MEM:-32MB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-2GB}
+      - -c
+      - max_connections=${PG_MAX_CONNECTIONS:-100}
+      - -c
+      - synchronous_commit=${PG_SYNCHRONOUS_COMMIT:-on}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-bench}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bench}

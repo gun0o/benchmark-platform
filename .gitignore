@@ -65,6 +65,7 @@ deploy/.env
 .env.*
 !.env.example
 !deploy/.env.example
+!deploy/.env.loadtest.example
 deploy/aws/.terraform/
 deploy/aws/*.tfstate
 deploy/aws/*.tfstate.*

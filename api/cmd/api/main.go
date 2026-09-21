@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -32,18 +33,27 @@ func main() {
 	}
 	defer st.Close()
 
-	srv := httpapi.NewServer(st, httpapi.Options{Log: log, MaxResults: cfg.MaxResults})
+	srv := httpapi.NewServer(st, httpapi.Options{
+		Log:            log,
+		MaxResults:     cfg.MaxResults,
+		HandlerTimeout: cfg.HandlerLimit,
+	})
 	server := &http.Server{
-		Addr:              cfg.Addr,
-		Handler:           srv.Routes(),
+		Addr:    cfg.Addr,
+		Handler: srv.Handler(),
+		// Go's zero-value http.Server has no limits at all: a client that opens a
+		// connection and never finishes its headers holds a goroutine forever.
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
 	}
 
 	go func() {
-		log.Info("listening", "addr", cfg.Addr, "pg_max_conns", cfg.PGMaxConns)
+		log.Info("listening", "addr", cfg.Addr, "pg_max_conns", cfg.PGMaxConns,
+			"gomaxprocs", runtime.GOMAXPROCS(0), "max_results", cfg.MaxResults)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("server stopped", "err", err)
 			os.Exit(1)

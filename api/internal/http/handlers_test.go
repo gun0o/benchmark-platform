@@ -24,6 +24,8 @@ type fakeStore struct {
 	ingested   []*model.RunEnvelope
 	seenRunIDs map[string]bool
 	rows       []model.Measurement
+	machines   []model.MachineRow
+	runs       []model.Run
 	lastFilter store.MeasurementFilter
 	ingestErr  error
 	listErr    error
@@ -32,19 +34,67 @@ type fakeStore struct {
 
 func newFake() *fakeStore { return &fakeStore{seenRunIDs: map[string]bool{}} }
 
-func (f *fakeStore) IngestRun(_ context.Context, env *model.RunEnvelope) (store.IngestResult, error) {
+// IngestStream mirrors the real store closely enough for the handler contract: decode
+// (strictly, streaming), then remember the run and report what a second POST would do.
+func (f *fakeStore) IngestStream(_ context.Context, body io.Reader, maxResults int) (store.IngestResult, error) {
+	var results []model.Result
+	env, err := model.StreamRunEnvelope(body, maxResults,
+		func(_ *model.RunEnvelope, _ int, r *model.Result) error {
+			results = append(results, *r)
+			return nil
+		})
+	if err != nil {
+		return store.IngestResult{}, err
+	}
 	if f.ingestErr != nil {
 		return store.IngestResult{}, f.ingestErr
 	}
-	res := store.IngestResult{RunID: env.RunID, MachineID: env.Machine.ID}
+	env.Results = results
+	res := store.IngestResult{RunID: env.RunID, MachineID: env.Machine.ID, Results: len(results)}
 	if f.seenRunIDs[env.RunID] {
 		res.Duplicate = true
+		res.Skipped = len(results)
 		return res, nil
 	}
 	f.seenRunIDs[env.RunID] = true
 	f.ingested = append(f.ingested, env)
-	res.Inserted = len(env.Results)
+	res.Inserted = len(results)
 	return res, nil
+}
+
+func (f *fakeStore) ListMachines(context.Context) ([]model.MachineRow, error) {
+	return f.machines, f.listErr
+}
+
+func (f *fakeStore) GetMachine(_ context.Context, id string) (model.MachineRow, error) {
+	for _, m := range f.machines {
+		if m.ID == id {
+			return m, nil
+		}
+	}
+	return model.MachineRow{}, store.ErrNotFound
+}
+
+func (f *fakeStore) ListRuns(_ context.Context, machineID string, limit int) ([]model.Run, error) {
+	var out []model.Run
+	for _, r := range f.runs {
+		if machineID == "" || r.MachineID == machineID {
+			out = append(out, r)
+		}
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, f.listErr
+}
+
+func (f *fakeStore) GetRun(_ context.Context, id string) (model.Run, error) {
+	for _, r := range f.runs {
+		if r.ID == id {
+			return r, nil
+		}
+	}
+	return model.Run{}, store.ErrNotFound
 }
 
 func (f *fakeStore) ListMeasurements(_ context.Context, filter store.MeasurementFilter) ([]model.Measurement, error) {
@@ -64,7 +114,9 @@ func (f *fakeStore) Ping(context.Context) error { return f.pingErr }
 func newServer(t *testing.T, f *fakeStore) http.Handler {
 	t.Helper()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return httpapi.NewServer(f, httpapi.Options{Log: log}).Routes()
+	// The full stack, not just the mux: the middleware is part of the contract these
+	// tests assert (request ids, gzip, a panic that becomes a 500).
+	return httpapi.NewServer(f, httpapi.Options{Log: log}).Handler()
 }
 
 func exampleEnvelope(t *testing.T) []byte {
@@ -105,7 +157,7 @@ func TestIngestAcceptsExampleAndIsIdempotent(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if res.Inserted != 3 || res.Duplicate {
+	if res.Inserted != 3 || res.Duplicate || res.Results != 3 {
 		t.Fatalf("first POST: %+v, want inserted 3", res)
 	}
 
@@ -180,7 +232,7 @@ func TestIngestRejections(t *testing.T) {
 func TestIngestRefusesOversizeEnvelope(t *testing.T) {
 	f := newFake()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := httpapi.NewServer(f, httpapi.Options{Log: log, MaxResults: 2}).Routes()
+	h := httpapi.NewServer(f, httpapi.Options{Log: log, MaxResults: 2}).Handler()
 	rec := post(t, h, "/v1/runs", string(exampleEnvelope(t)))
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status %d, want 413: %s", rec.Code, rec.Body.String())
@@ -300,10 +352,20 @@ func TestHealthzAndReadyz(t *testing.T) {
 
 func TestMethodNotAllowed(t *testing.T) {
 	h := newServer(t, newFake())
-	req := httptest.NewRequest(http.MethodGet, "/v1/runs", nil)
+	// /v1/runs answers GET (list) and POST (ingest); anything else is the mux's 405,
+	// which comes from the method patterns rather than from handler code.
+	for _, method := range []string{http.MethodDelete, http.MethodPut} {
+		req := httptest.NewRequest(method, "/v1/runs", nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("%s /v1/runs: %d, want 405", method, rec.Code)
+		}
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/measurements", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("GET /v1/runs: %d, want 405", rec.Code)
+		t.Fatalf("POST /v1/measurements: %d, want 405", rec.Code)
 	}
 }

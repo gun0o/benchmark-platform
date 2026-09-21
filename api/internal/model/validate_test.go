@@ -246,3 +246,18 @@ func TestRealEngineRunDecodesStrictly(t *testing.T) {
 
 // openSchema opens the normative schema file; shared with the benchmarks.
 func openSchema() (*os.File, error) { return os.Open(schemaPath) }
+
+// mutate applies one edit to the example document and returns it re-serialized.
+func mutate(t *testing.T, base []byte, edit func(map[string]any)) []byte {
+	t.Helper()
+	var doc map[string]any
+	if err := json.Unmarshal(base, &doc); err != nil {
+		t.Fatalf("unmarshal base: %v", err)
+	}
+	edit(doc)
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal mutation: %v", err)
+	}
+	return raw
+}

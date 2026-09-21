@@ -1,0 +1,82 @@
+# M5.1 — the endpoints added in this milestone, 2026-09-21T21:27:15Z
+
+$ curl -sS localhost:8080/v1/machines
+{
+    "machines": [
+        {
+            "id": "7fea9ecafd05d7a64f0fcd74cf35f695",
+            "hostname": "MatthewLaptop",
+            "cpu_model": "Intel(R) Core(TM) Ultra 9 185H",
+            "physical_cores": 11,
+            "logical_cpus": 22,
+            "l1d_kb": 48,
+            "l2_kb": 2048,
+            "l3_kb": 24576,
+            "memory_bytes": 16659374080,
+            "os": "Ubuntu 22.04.5 LTS (WSL2)",
+            "kernel": "6.18.33.2-microsoft-standard-WSL2",
+            "compiler": "g++ 13.4.0",
+            "compiler_flags": "-O3 -march=native",
+            "engine_version": "",
+            "engine_git_sha": "",
+            "virtualized": "wsl2",
+            "first_seen": "2026-09-21T19:21:07.870437Z",
+            "last_seen": "2026-09-21T20:50:00Z",
+            "runs": 6,
+            "measurements": 150023
+        }
+    ]
+}
+
+$ curl -sS 'localhost:8080/v1/runs?limit=3'
+{"id": "99999999-aaaa-4bbb-8ccc-dddddddddddd", "machine_id": "7fea9ecafd05d7a64f0fcd74cf35f695", "engine_version": "0.1.0", "started_at": "2026-09-21T20:00:00Z"}
+{"id": "99999999-aaaa-4bbb-8ccc-eeeeeeeeeeee", "machine_id": "7fea9ecafd05d7a64f0fcd74cf35f695", "engine_version": "0.1.0", "started_at": "2026-09-21T20:00:00Z"}
+{"id": "99999999-aaaa-4bbb-8ccc-ffffffffffff", "machine_id": "7fea9ecafd05d7a64f0fcd74cf35f695", "engine_version": "0.1.0", "started_at": "2026-09-21T20:00:00Z"}
+
+$ curl -sS localhost:8080/v1/runs/993fe091-e561-4dce-b69f-400f49084bb5
+{
+    "id": "993fe091-e561-4dce-b69f-400f49084bb5",
+    "machine_id": "7fea9ecafd05d7a64f0fcd74cf35f695",
+    "engine_version": "0.1.0",
+    "engine_git_sha": "c6af2f8",
+    "started_at": "2026-09-21T19:21:07.870437Z",
+    "finished_at": "2026-09-21T19:21:09.39906Z",
+    "argv": [
+        "bench",
+        "run",
+        "--workload",
+        "cpu_int",
+        "--threads",
+        "1",
+        "--trials",
+        "10",
+        "--out",
+        "run.json"
+    ],
+    "ingested_at": "2026-09-21T19:23:15.208618Z",
+    "measurements": 10
+}
+
+$ curl -sS localhost:8080/v1/machines/nope -w ' (HTTP %{http_code})'
+{"error":{"code":"not_found","message":"no such machine"}}
+ (HTTP 404)
+
+## Middleware
+$ curl -sS -D- -o /dev/null -H 'X-Request-ID: from-the-shell' localhost:8080/healthz
+HTTP/1.1 200 OK
+X-Request-Id: from-the-shell
+$ curl -sS -D- -o /dev/null localhost:8080/healthz   # no id sent: one is minted
+X-Request-Id: c91f3187c2aaca27
+$ curl -sS -o plain.json -w 'plain: %{size_download} bytes\n' 'localhost:8080/v1/measurements?limit=1000'
+plain: 428545 bytes
+$ curl -sS -H 'Accept-Encoding: gzip' -o gz.json -w 'gzip: %{size_download} bytes\n' 'localhost:8080/v1/measurements?limit=1000'
+gzip: 30035 bytes transferred
+ratio: 14.3x on a 1000-row measurement page
+
+## The API's request log for the calls above
+{"time":"2026-09-21T16:27:16.313270125-05:00","level":"INFO","msg":"request","method":"GET","path":"/v1/runs/993fe091-e561-4dce-b69f-400f49084bb5","query":"","status":200,"bytes":391,"duration":1152370,"request_id":"9f5681131c17d79d"}
+{"time":"2026-09-21T16:27:16.386913797-05:00","level":"INFO","msg":"request","method":"GET","path":"/v1/machines/nope","query":"","status":404,"bytes":59,"duration":1023839,"request_id":"8a47e7e15b1dce47"}
+{"time":"2026-09-21T16:27:16.391385432-05:00","level":"INFO","msg":"request","method":"GET","path":"/healthz","query":"","status":200,"bytes":16,"duration":57511,"request_id":"from-the-shell"}
+{"time":"2026-09-21T16:27:16.39858572-05:00","level":"INFO","msg":"request","method":"GET","path":"/healthz","query":"","status":200,"bytes":16,"duration":38289,"request_id":"8676aabd63d7f863"}
+{"time":"2026-09-21T16:27:16.408542141-05:00","level":"INFO","msg":"request","method":"GET","path":"/v1/measurements","query":"limit=1000","status":200,"bytes":428545,"duration":5934956,"request_id":"ff54f9589408fe0e"}
+{"time":"2026-09-21T16:27:16.418992859-05:00","level":"INFO","msg":"request","method":"GET","path":"/v1/measurements","query":"limit=1000","status":200,"bytes":30035,"duration":5165862,"request_id":"6d935a09ec840dcd"}

@@ -113,6 +113,12 @@ type Run struct {
 	Measurements  int64           `json:"measurements,omitempty"`
 }
 
+// UTC normalizes a run's timestamps. pgx renders timestamptz in the process's local zone,
+// and every timestamp this project writes is UTC with a Z, so the responses say so too.
+func (r *Run) UTC() {
+	r.StartedAt, r.FinishedAt, r.IngestedAt = r.StartedAt.UTC(), r.FinishedAt.UTC(), r.IngestedAt.UTC()
+}
+
 // MachineRow is a stored machine with its first/last sighting.
 type MachineRow struct {
 	Machine

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -88,5 +89,106 @@ func BenchmarkJSONSchemaValidate(b *testing.B) {
 		if err := sch.Validate(v); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// BenchmarkStreamDecodeAndValidate is the M5.1 path: results are validated and handed
+// over one at a time, so nothing but the caller's batch is retained.
+func BenchmarkStreamDecodeAndValidate(b *testing.B) {
+	raw := bigEnvelope(benchResults)
+	b.SetBytes(int64(len(raw)))
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		n := 0
+		_, err := model.StreamRunEnvelope(bytes.NewReader(raw), benchResults,
+			func(_ *model.RunEnvelope, _ int, r *model.Result) error {
+				n++
+				_ = r.Value
+				return nil
+			})
+		if err != nil {
+			b.Fatal(err)
+		}
+		if n != benchResults {
+			b.Fatalf("streamed %d results, want %d", n, benchResults)
+		}
+	}
+}
+
+// BenchmarkStreamDecodeIntoBatches models what ingest really does: keep at most one
+// 10,000-row batch alive, then drop it (the real one hands it to CopyFrom).
+func BenchmarkStreamDecodeIntoBatches(b *testing.B) {
+	raw := bigEnvelope(benchResults)
+	b.SetBytes(int64(len(raw)))
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		batch := make([]model.Result, 0, 10_000)
+		flushed := 0
+		_, err := model.StreamRunEnvelope(bytes.NewReader(raw), benchResults,
+			func(_ *model.RunEnvelope, _ int, r *model.Result) error {
+				batch = append(batch, *r)
+				if len(batch) == cap(batch) {
+					flushed += len(batch)
+					batch = batch[:0]
+				}
+				return nil
+			})
+		if err != nil {
+			b.Fatal(err)
+		}
+		flushed += len(batch)
+		if flushed != benchResults {
+			b.Fatalf("batched %d results, want %d", flushed, benchResults)
+		}
+	}
+}
+
+// TestRetainedHeap measures what the two decode paths keep alive at the moment the last
+// result is in hand: the number that decides how many concurrent ingests fit in memory.
+// Total allocation (the benchmarks above) is not that number.
+func TestRetainedHeap(t *testing.T) {
+	raw := bigEnvelope(benchResults)
+
+	heapNow := func() uint64 {
+		runtime.GC()
+		var ms runtime.MemStats
+		runtime.ReadMemStats(&ms)
+		return ms.HeapAlloc
+	}
+
+	base := heapNow()
+	var whole model.RunEnvelope
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&whole); err != nil {
+		t.Fatal(err)
+	}
+	wholeHeap := heapNow() - base
+	if len(whole.Results) != benchResults {
+		t.Fatalf("decoded %d results", len(whole.Results))
+	}
+	whole.Results = nil
+
+	base = heapNow()
+	batch := make([]model.Result, 0, 10_000)
+	var peak uint64
+	_, err := model.StreamRunEnvelope(bytes.NewReader(raw), benchResults,
+		func(_ *model.RunEnvelope, i int, r *model.Result) error {
+			batch = append(batch, *r)
+			if len(batch) == cap(batch) {
+				if h := heapNow() - base; h > peak {
+					peak = h
+				}
+				batch = batch[:0]
+			}
+			return nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("%d results: whole-document decode retains %.1f MB, streaming into 10K batches peaks at %.1f MB (%.1fx)",
+		benchResults, float64(wholeHeap)/1e6, float64(peak)/1e6, float64(wholeHeap)/float64(peak))
+	if peak >= wholeHeap/2 {
+		t.Fatalf("streaming peak %d is not meaningfully below the whole-document %d", peak, wholeHeap)
 	}
 }

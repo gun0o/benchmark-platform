@@ -1,0 +1,82 @@
+# M5.1 — query plans, 2026-09-21T19:41:54Z
+# Table size at the time:
+ measurements 
+--------------
+       150023
+(1 row)
+
+ANALYZE
+## The list query with every filter (what GET /v1/measurements runs)
+                                                                                            QUERY PLAN                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=0.047..0.132 rows=100 loops=1)
+   Buffers: shared hit=28
+   ->  Index Scan using measurements_pkey on measurements (actual time=0.046..0.127 rows=100 loops=1)
+         Filter: ((machine_id = '7fea9ecafd05d7a64f0fcd74cf35f695'::text) AND (metric = 'cpu_int_ops'::text) AND (workload = 'cpu_int'::text) AND (thread_count = 2) AND (working_set_bytes = 0))
+         Rows Removed by Filter: 321
+         Buffers: shared hit=28
+ Planning:
+   Buffers: shared hit=222
+ Planning Time: 0.940 ms
+ Execution Time: 0.197 ms
+(10 rows)
+
+## The same with a keyset cursor deep into the table
+                                                             QUERY PLAN                                                              
+-------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=0.035..0.120 rows=100 loops=1)
+   Buffers: shared hit=26
+   ->  Index Scan using measurements_pkey on measurements (actual time=0.034..0.114 rows=100 loops=1)
+         Index Cond: (id > 40000)
+         Filter: ((machine_id = '7fea9ecafd05d7a64f0fcd74cf35f695'::text) AND (metric = 'cpu_int_ops'::text) AND (thread_count = 2))
+         Rows Removed by Filter: 298
+         Buffers: shared hit=26
+ Planning:
+   Buffers: shared hit=187
+ Planning Time: 0.818 ms
+ Execution Time: 0.160 ms
+(11 rows)
+
+## For contrast: what OFFSET would have cost at the same depth
+                                                             QUERY PLAN                                                              
+-------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=26.947..26.948 rows=0 loops=1)
+   Buffers: shared hit=8388
+   ->  Index Scan using measurements_pkey on measurements (actual time=0.046..26.153 rows=37500 loops=1)
+         Filter: ((machine_id = '7fea9ecafd05d7a64f0fcd74cf35f695'::text) AND (metric = 'cpu_int_ops'::text) AND (thread_count = 2))
+         Rows Removed by Filter: 112523
+         Buffers: shared hit=8388
+ Planning:
+   Buffers: shared hit=180
+ Planning Time: 0.816 ms
+ Execution Time: 26.975 ms
+(10 rows)
+
+
+## After migration 0003 (filter index now ends with id)
+    "measurements_pkey" PRIMARY KEY, btree (id)
+    "measurements_dedup_idx" UNIQUE, btree (run_id, metric, thread_count, working_set_bytes, trial)
+    "measurements_filter_idx" btree (machine_id, metric, workload, thread_count, working_set_bytes, id)
+    "measurements_run_idx" btree (run_id)
+Foreign-key constraints:
+    "measurements_machine_id_fkey" FOREIGN KEY (machine_id) REFERENCES machines(id)
+    "measurements_run_id_fkey" FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
+
+                                                                                            QUERY PLAN                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=0.058..0.143 rows=100 loops=1)
+   Buffers: shared hit=28
+   ->  Index Scan using measurements_pkey on measurements (actual time=0.056..0.137 rows=100 loops=1)
+         Filter: ((machine_id = '7fea9ecafd05d7a64f0fcd74cf35f695'::text) AND (metric = 'cpu_int_ops'::text) AND (workload = 'cpu_int'::text) AND (thread_count = 2) AND (working_set_bytes = 0))
+         Rows Removed by Filter: 321
+         Buffers: shared hit=28
+ Planning:
+   Buffers: shared hit=200
+ Planning Time: 0.825 ms
+ Execution Time: 0.182 ms
+(10 rows)
+
+# Still the primary key: at this moment every row in the table belongs to that one
+# machine and that one metric, so walking the pkey finds 100 matches in 421 rows and
+# the composite index would be strictly more work. The plan is re-checked against the
+# seeded 100K+ rows over five machines in docs/results/m5.2/explain.log.

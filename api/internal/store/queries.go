@@ -128,9 +128,13 @@ const machineCols = `id, hostname, cpu_model, physical_cores, logical_cpus, l1d_
                      first_seen, last_seen`
 
 func scanMachine(row pgx.Row, m *model.MachineRow) error {
-	return row.Scan(&m.ID, &m.Hostname, &m.CPUModel, &m.PhysicalCores, &m.LogicalCPUs,
+	if err := row.Scan(&m.ID, &m.Hostname, &m.CPUModel, &m.PhysicalCores, &m.LogicalCPUs,
 		&m.L1dKB, &m.L2KB, &m.L3KB, &m.MemoryBytes, &m.OS, &m.Kernel, &m.Compiler,
-		&m.CompilerFlags, &m.Virtualized, &m.FirstSeen, &m.LastSeen)
+		&m.CompilerFlags, &m.Virtualized, &m.FirstSeen, &m.LastSeen); err != nil {
+		return err
+	}
+	m.FirstSeen, m.LastSeen = m.FirstSeen.UTC(), m.LastSeen.UTC()
+	return nil
 }
 
 // ListMachines returns every known machine, newest sighting first, with row counts.
@@ -153,6 +157,7 @@ func (s *Store) ListMachines(ctx context.Context) ([]model.MachineRow, error) {
 			&m.Runs, &m.Measurements); err != nil {
 			return nil, fmt.Errorf("scan machine: %w", err)
 		}
+		m.FirstSeen, m.LastSeen = m.FirstSeen.UTC(), m.LastSeen.UTC()
 		out = append(out, m)
 	}
 	return out, rows.Err()
@@ -197,6 +202,7 @@ func (s *Store) ListRuns(ctx context.Context, machineID string, limit int) ([]mo
 			&r.StartedAt, &r.FinishedAt, &r.Argv, &r.IngestedAt); err != nil {
 			return nil, fmt.Errorf("scan run: %w", err)
 		}
+		r.UTC()
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -218,5 +224,6 @@ func (s *Store) GetRun(ctx context.Context, id string) (model.Run, error) {
 		}
 		return r, fmt.Errorf("get run: %w", err)
 	}
+	r.UTC()
 	return r, nil
 }
