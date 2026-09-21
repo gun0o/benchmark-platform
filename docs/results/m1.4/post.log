@@ -1,0 +1,39 @@
+# M1.4 verify — 2026-09-21T19:28:28Z
+
+$ psql -c 'select count(*) from measurements'   # before
+10
+
+$ bench run --workload cpu_int --threads 1 --trials 10 --post http://localhost:8080
+bench: POST http://localhost:8080/v1/runs -> 200 (10 results, 9576 bytes)
+{"run_id":"31085d5d-955b-4810-8b59-4c9e3a4b1455","inserted":10,"duplicate":false,"machine_id":"7fea9ecafd05d7a64f0fcd74cf35f695"}
+
+$ psql -c 'select count(*) from measurements'   # after
+20
+
+# the API's log line for that ingest:
+{"time":"2026-09-21T14:28:30.532357255-05:00","level":"INFO","msg":"ingested run","run_id":"31085d5d-955b-4810-8b59-4c9e3a4b1455","machine_id":"7fea9ecafd05d7a64f0fcd74cf35f695","inserted":10,"duplicate":false}
+
+## Failure modes (the run's numbers survive all of them)
+
+$ bench run --workload cpu_int --trials 2 --post http://localhost:9 --out /tmp/claude-1000/-home-matthewlee-benchmark-platform/f5e09172-3231-40fc-b29f-1efd9bcd51fd/scratchpad/dead.json ; echo "exit=$?"
+bench: --post http://localhost:9/v1/runs: connect: Connection refused
+exit=1
+# --out was still written:
+2 results in the file
+
+$ bench run --workload cpu_int --trials 2 --post https://localhost:8080 ; echo "exit=$?"
+bench: --post: https is not supported by the engine's HTTP client: https://localhost:8080
+exit=1   # re-checked without the pipeline; the `tail` above had captured tail's status
+
+$ bench run --workload cpu_int --trials 2 --post http://localhost:8080/v1/nope
+bench: POST http://localhost:8080/v1/nope -> 404 (2 results, 2860 bytes)
+404 page not found
+exit=1
+
+$ bench run --workload cpu_int --trials 3 --post http://localhost:8080 --out /tmp/claude-1000/-home-matthewlee-benchmark-platform/f5e09172-3231-40fc-b29f-1efd9bcd51fd/scratchpad/both.json   # both outputs
+bench: POST http://localhost:8080/v1/runs -> 200 (3 results, 3802 bytes)
+{"run_id":"4c6a5cd6-b2a6-4a6e-99f3-216a21aceb31","inserted":3,"duplicate":false,"machine_id":"7fea9ecafd05d7a64f0fcd74cf35f695"}
+3 results also written to --out
+
+$ psql -c 'select count(*) from measurements'   # after all of the above
+23

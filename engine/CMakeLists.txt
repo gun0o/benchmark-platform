@@ -79,6 +79,7 @@ add_library(bench_core STATIC
   src/sha256.cpp
   src/sysinfo.cpp
   src/result.cpp
+  src/http.cpp
   src/validate.cpp
   src/timing.cpp
   src/cache.cpp

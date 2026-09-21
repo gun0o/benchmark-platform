@@ -1,5 +1,6 @@
 // bench CLI: sysinfo | list | run | report | validate | disk
 #include "bench/cache.hpp"
+#include "bench/http.hpp"
 #include "bench/result.hpp"
 #include "bench/runner.hpp"
 #include "bench/sysinfo.hpp"
@@ -70,6 +71,35 @@ int write_json(const bench::json& j, const std::string& out_path, bool pretty) {
     return 0;
 }
 
+// POST the envelope and print what came back. The run is already written to --out by the
+// time this runs, so a failure here costs the report, never the measurements.
+int post_envelope(const bench::json& j, const std::string& url_str, int timeout_ms) {
+    bench::Url url;
+    try {
+        url = bench::parse_url(url_str);
+    } catch (const std::exception& e) {
+        std::cerr << "bench: --post: " << e.what() << '\n';
+        return 1;
+    }
+    if (url.path.empty() || url.path == "/")
+        url.path = "/v1/runs";
+
+    const std::string body = j.dump();
+    const auto res = bench::post_json(url, body, timeout_ms);
+    if (!res.error.empty()) {
+        std::cerr << std::format("bench: --post http://{}:{}{}: {}\n", url.host, url.port,
+                                 url.path, res.error);
+        return 1;
+    }
+    std::cerr << std::format("bench: POST http://{}:{}{} -> {} ({} results, {} bytes)\n",
+                             url.host, url.port, url.path, res.status, j["results"].size(),
+                             body.size());
+    std::cout << res.body;
+    if (!res.body.empty() && res.body.back() != '\n')
+        std::cout << '\n';
+    return res.ok() ? 0 : 1;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -104,7 +134,8 @@ int main(int argc, char** argv) {
     });
 
     // ---- run -----------------------------------------------------------------------
-    std::string workloads_csv, metrics_csv, threads_csv = "1", ws_csv = "0", out_path;
+    std::string workloads_csv, metrics_csv, threads_csv = "1", ws_csv = "0", out_path, post_url;
+    int post_timeout_ms = 10000;
     bool all = false, run_pretty = false, verbose = false;
     bench::RunConfig cfg;
     auto* run = app.add_subcommand("run", "Run benchmarks and emit a run envelope");
@@ -178,7 +209,15 @@ int main(int argc, char** argv) {
     run->add_flag("--pin", pin,
                   "Pin worker i to the i-th CPU of --cpus (default: 0,2,4,... then odds)");
     run->add_option("--cpus", cpus_csv, "Comma-separated CPU ids for --pin, e.g. 0,2,4,6");
-    run->add_option("-o,--out", out_path, "Output file (default stdout)");
+    run->add_option("-o,--out", out_path, "Output file (default stdout, unless --post)");
+    run->add_option("--post", post_url,
+                    "POST the run envelope to an API, e.g. http://localhost:8080 "
+                    "(/v1/runs is appended when the URL has no path). Without --out the "
+                    "envelope is not also printed to stdout");
+    run->add_option("--post-timeout-ms", post_timeout_ms,
+                    "Per-operation timeout for --post (connect, send, receive)")
+        ->default_val(10000)
+        ->check(CLI::PositiveNumber);
     run->add_flag("--pretty", run_pretty, "Indent JSON output");
     run->add_flag("-v,--verbose", verbose, "Print each result to stderr as it completes");
     run->callback([&] {
@@ -312,7 +351,13 @@ int main(int argc, char** argv) {
         const auto problems = bench::validate_run(j); // never emit something we would reject
         for (const auto& p : problems)
             std::cerr << "bench: internal validation: " << p << '\n';
-        const int rc = write_json(j, out_path, run_pretty);
+        // With --post and no --out the POST is the output: printing 1000 trials to stdout
+        // as well would bury the API's reply in them.
+        int rc = 0;
+        if (!out_path.empty() || post_url.empty())
+            rc = write_json(j, out_path, run_pretty);
+        if (rc == 0 && !post_url.empty())
+            rc = post_envelope(j, post_url, post_timeout_ms);
         std::exit(problems.empty() ? rc : 2);
     });
 
