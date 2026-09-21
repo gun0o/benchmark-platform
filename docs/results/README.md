@@ -177,6 +177,12 @@ Windows caches the VHDX; nothing run inside the guest can, which is why the labe
 | `m3.1/` | M3.1 | memory bandwidth: the working-set sweep, the thread knee, write-allocate, `--nt` |
 | `m3.2/` | M3.2 | cache latency: the pointer chase, the L1/L2 steps, huge pages, cold-vs-warm |
 | `m4.1/` | M4.1 | disk I/O: O_DIRECT, the fio comparison, the cold check, `O_DSYNC` writes |
+| `m1.3/` | M1.3 | the API's first slice: ingest, list, and the schema-drift tests |
+| `m1.4/` | M1.4 | the engine's `--post`: the socket HTTP client and its failure modes |
+| `m5.1/` | M5.1 | ingest hardening: streaming decode, row-level idempotency, the query plans |
+| `m5.2/` | M5.2 | the synthetic data generator: 112,500 modelled rows, CoV against sigma |
+| `m5.3/` | M5.3 | aggregation and cache: numpy cross-check, hit/miss timings, invalidation |
+| `m5.4/` | M5.4 | the k6 load test: Target #4, the cache's contribution, the pool sweep |
 
 ## Targets
 
@@ -184,9 +190,36 @@ Windows caches the VHDX; nothing run inside the guest can, which is why the labe
 |---|---|---|
 | Engine ≥ 10M ops/s | **met** (M2.4) | `cpu_2026-09-20.json`, table above |
 | CoV ≤ 3 % over ≥ 1000 trials | **not met** (CPU): best 3.47 % | `variance_2026-09-21.md`; M3.3 for memory |
-| API ingests/queries ≥ 100K measurements | not yet run | M5.2 |
-| API ≥ 1000 req/s, p95 ≤ 50 ms | not yet run | M5.4 |
+| API ingests/queries ≥ 100K measurements | **met** (M5.2) | 112,510 rows ingested through the real path; `m5.2/seed.log` |
+| API ≥ 1000 req/s, p95 ≤ 50 ms | **met** (M5.4): p95 **1.17 ms** | `k6_2026-09-21.json`, `m5.4/summary.txt` |
 | Dashboard: 12 metrics, 10K+ points | not yet run | M6.3 |
+
+## API — M1.3, M1.4, M5.1–M5.4, 2026-09-21
+
+The Go API ingests run envelopes and serves them back. Sources: `m1.3/` … `m5.4/`;
+reasoning in `docs/notes/M1.3.md`, `M1.4.md`, `M5.1.md`, `M5.2.md`, `M5.3.md`, `M5.4.md`.
+Postgres 16 and Redis 7 in docker-compose (data on a VHDX, as with every disk number
+here); the API run natively in WSL unless stated.
+
+| what | measured |
+|---|---:|
+| ingest, 50,000-result envelope over HTTP | 2.05 s (target was < 2 s; 1.64 s in-process) |
+| the same 50,000 rows written inside Postgres, no client | 1.43 s — the write rate is the constraint, not the ingest path |
+| row-by-row `INSERT` vs batched `CopyFrom` | 4,437 vs 26,611 rows/s |
+| retained heap decoding that envelope | 11.5 MB → **2.3 MB** once ingest streams |
+| `OFFSET 40000` vs a keyset cursor, same page | 26.98 ms / 8,388 buffers vs 0.16 ms / 26 |
+| seeding 112,500 modelled rows through the API | 5.08 s (≈22,100 rows/s end to end) |
+| SQL aggregates vs numpy over the same rows | agree to better than 1e-6 relative, 25 groups |
+| cache hit vs miss, `/v1/aggregates` | 0.48 ms vs 6.68 ms (p50) |
+| with Redis stopped, before / after a circuit breaker | 3.4 s → **1.3 ms** per request |
+| **Target #4**: 1000 req/s for 60 s | **p95 1.17 ms**, 60,001 requests, 0 dropped, 0.00 % errors |
+| the same with the cache off | p95 3.46 ms — the target is met without Redis |
+| reads with 5,000 rows/s of ingest underneath | p95 2.17 ms, hit rate 95.9 % → 80.8 % |
+| `PG_MAX_CONNS` 10 / 20 / 40 / 80 at 6000 req/s, cache off | p95 41.49 / 10.49 / 9.17 / 8.34 ms |
+
+The load test finds no latency knee up to 12,000 req/s; what it finds instead is k6 using
+360 % CPU against the API's 320 % on the same 22 vCPUs. The honest ceiling is "at least
+5,000 req/s at a p95 of 1.15 ms, on a laptop that is also generating the load".
 
 ## Variance — M2.5, 2026-09-21
 
