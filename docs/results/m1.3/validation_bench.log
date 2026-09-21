@@ -1,0 +1,10 @@
+$ go test -run XXX -bench . -benchmem -benchtime 5x ./internal/model/
+# 50,000-result envelope (13.6 MB of JSON), M1.3's two candidate validators.
+goos: linux
+goarch: amd64
+pkg: github.com/matthewlee/benchmark-platform/api/internal/model
+cpu: Intel(R) Core(TM) Ultra 9 185H
+BenchmarkStrictDecodeAndValidate-22    	       5	  98296238 ns/op	 138.25 MB/s	91801921 B/op	  120037 allocs/op
+BenchmarkJSONSchemaValidate-22         	       5	1050283139 ns/op	  12.94 MB/s	901632497 B/op	18150422 allocs/op
+PASS
+ok  	github.com/matthewlee/benchmark-platform/api/internal/model	6.998s

@@ -1,0 +1,40 @@
+# M1.3 verify — 2026-09-21T19:23:15Z
+
+The posted file is docs/results/m1.3/engine_run.json (10 trials of cpu_int, 1 thread),
+written by the release engine at c6af2f8. Tables truncated first.
+
+$ curl -sS -X POST localhost:8080/v1/runs --data-binary @engine/run.json
+{"run_id":"993fe091-e561-4dce-b69f-400f49084bb5","inserted":10,"duplicate":false,"machine_id":"7fea9ecafd05d7a64f0fcd74cf35f695"}
+
+$ curl -sS -X POST localhost:8080/v1/runs --data-binary @engine/run.json   # same run_id again
+{"run_id":"993fe091-e561-4dce-b69f-400f49084bb5","inserted":0,"duplicate":true,"machine_id":"7fea9ecafd05d7a64f0fcd74cf35f695"}
+
+$ psql -c 'select count(*) from measurements'
+ count 
+-------
+    10
+(1 row)
+
+$ psql -c 'select id, hostname, physical_cores, l3_kb from machines'
+                id                |   hostname    | physical_cores | l3_kb 
+----------------------------------+---------------+----------------+-------
+ 7fea9ecafd05d7a64f0fcd74cf35f695 | MatthewLaptop |             11 | 24576
+(1 row)
+
+$ psql -c 'select id, engine_version, engine_git_sha, argv from runs'
+                  id                  | engine_version | engine_git_sha |                                                argv                                                
+--------------------------------------+----------------+----------------+----------------------------------------------------------------------------------------------------
+ 993fe091-e561-4dce-b69f-400f49084bb5 | 0.1.0          | c6af2f8        | ["bench", "run", "--workload", "cpu_int", "--threads", "1", "--trials", "10", "--out", "run.json"]
+(1 row)
+
+$ curl -sS 'localhost:8080/v1/measurements?metric=cpu_int_ops&limit=2' | jq '.measurements[] | {id,trial,value,recorded_at}'
+{"id": 11, "trial": 0, "value": 4696116407.836898, "unit": "ops/s", "recorded_at": "2026-09-21T19:21:08.939112Z", "duration_ns": 50016014}
+{"id": 12, "trial": 1, "value": 4881186880.323517, "unit": "ops/s", "recorded_at": "2026-09-21T19:21:08.989225Z", "duration_ns": 50053033}
+next_cursor: 12
+$ curl -sS 'localhost:8080/v1/measurements?metric=nope'   # unknown enum value
+{"error":{"code":"invalid_query","message":"unknown metric \"nope\""}}
+ (HTTP 400)
+$ curl -sS localhost:8080/healthz ; curl -sS localhost:8080/readyz
+{"status":"ok"}
+
+{"postgres":"ok","status":"ok"}

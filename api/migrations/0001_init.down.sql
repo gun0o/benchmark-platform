@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS measurements;
+DROP TABLE IF EXISTS runs;
+DROP TABLE IF EXISTS machines;

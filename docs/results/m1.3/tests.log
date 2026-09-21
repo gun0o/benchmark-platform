@@ -1,0 +1,47 @@
+$ go test ./...
+?   	github.com/matthewlee/benchmark-platform/api/cmd/api	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/cmd/migrate	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/internal/config	[no test files]
+ok  	github.com/matthewlee/benchmark-platform/api/internal/http	0.004s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/model	0.016s
+?   	github.com/matthewlee/benchmark-platform/api/internal/store	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/migrations	[no test files]
+
+$ go test -tags integration ./...
+?   	github.com/matthewlee/benchmark-platform/api/cmd/api	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/cmd/migrate	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/internal/config	[no test files]
+ok  	github.com/matthewlee/benchmark-platform/api/internal/http	0.005s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/model	0.016s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/store	0.344s
+?   	github.com/matthewlee/benchmark-platform/api/migrations	[no test files]
+
+$ go vet ./... && gofmt -l .
+(clean)
+
+$ go test -tags integration ./internal/store/ -v -run Test 2>&1 | grep -E '^(=== RUN|--- (PASS|FAIL)|ok|FAIL)'
+--- PASS: TestIngestRoundTrip (0.08s)
+--- PASS: TestIngestIsIdempotentOnRunID (0.07s)
+--- PASS: TestMachineUpsertKeepsFirstSeen (0.07s)
+--- PASS: TestKeysetPaginationCoversEveryRowExactlyOnce (0.07s)
+--- PASS: TestFiltersNarrowAsAdvertised (0.07s)
+ok  	github.com/matthewlee/benchmark-platform/api/internal/store	0.363s
+
+$ go test ./internal/model ./internal/http -v 2>&1 | grep -E '^(--- (PASS|FAIL)|ok)'
+--- PASS: TestEnumsMatchSchema (0.00s)
+--- PASS: TestMetricPairingsMatchSchema (0.00s)
+--- PASS: TestExampleRunValidates (0.00s)
+--- PASS: TestGoValidatorAgreesWithJSONSchema (0.01s)
+--- PASS: TestValidateReportsEveryProblem (0.00s)
+--- PASS: TestParseTimestamp (0.00s)
+--- PASS: TestRealEngineRunDecodesStrictly (0.00s)
+ok  	github.com/matthewlee/benchmark-platform/api/internal/model	0.016s
+--- PASS: TestIngestAcceptsExampleAndIsIdempotent (0.00s)
+--- PASS: TestIngestRejections (0.00s)
+--- PASS: TestIngestRefusesOversizeEnvelope (0.00s)
+--- PASS: TestIngestStoreFailureIs500 (0.00s)
+--- PASS: TestMeasurementFilterParsing (0.00s)
+--- PASS: TestListReturnsCursorOnlyWhenPageIsFull (0.00s)
+--- PASS: TestHealthzAndReadyz (0.00s)
+--- PASS: TestMethodNotAllowed (0.00s)
+ok  	github.com/matthewlee/benchmark-platform/api/internal/http	0.004s

@@ -1,0 +1,225 @@
+openapi: 3.1.0
+info:
+  title: benchmark-platform API
+  version: "1.0.0"
+  description: |
+    Ingests benchmark run envelopes produced by the `bench` engine and serves the stored
+    measurements. The request body of POST /v1/runs is exactly the document described by
+    `schema/benchmark-result.schema.json`, which is the source of truth for every field
+    and enum below.
+servers:
+  - url: http://localhost:8080
+paths:
+  /healthz:
+    get:
+      summary: Liveness. Always 200 while the process is running; never touches Postgres.
+      operationId: getHealthz
+      responses:
+        "200":
+          description: alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok] }
+  /readyz:
+    get:
+      summary: Readiness. Pings Postgres.
+      operationId: getReadyz
+      responses:
+        "200":
+          description: ready
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Readiness" }
+        "503":
+          description: not ready
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Readiness" }
+  /v1/runs:
+    post:
+      summary: Ingest one run envelope.
+      description: |
+        Idempotent on `run_id`: a run already stored is a no-op and reports
+        `inserted: 0, duplicate: true`. The machine block is upserted by `machine.id`.
+      operationId: ingestRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RunEnvelope" }
+      responses:
+        "200":
+          description: stored (or already present)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IngestResult" }
+        "400":
+          description: malformed JSON or a schema violation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413":
+          description: more results than one envelope may carry
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/measurements:
+    get:
+      summary: List stored measurements with keyset pagination.
+      operationId: listMeasurements
+      parameters:
+        - { name: machine_id, in: query, schema: { type: string } }
+        - { name: run_id, in: query, schema: { type: string } }
+        - { name: workload, in: query, schema: { $ref: "#/components/schemas/Workload" } }
+        - { name: metric, in: query, schema: { $ref: "#/components/schemas/Metric" } }
+        - { name: thread_count, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: working_set_bytes, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 10000, default: 100 } }
+        - name: cursor
+          in: query
+          description: Keyset cursor; return rows with id greater than this. From `next_cursor`.
+          schema: { type: string }
+      responses:
+        "200":
+          description: one page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MeasurementPage" }
+        "400":
+          description: unknown filter value
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+components:
+  schemas:
+    Workload:
+      type: string
+      enum: [cpu_int, cpu_fp, cpu_hash, mem_bw, mem_latency, disk_seq, disk_rand]
+    Metric:
+      type: string
+      enum:
+        [cpu_int_ops, cpu_fp_ops, cpu_hash_ops, mem_read_bw, mem_write_bw, mem_copy_bw,
+         mem_latency, disk_seq_read_bw, disk_seq_write_bw, disk_rand_read_iops,
+         disk_rand_write_iops, disk_rand_read_p99_us]
+    Unit:
+      type: string
+      enum: ["ops/s", "GB/s", "ns", "MB/s", "IOPS", "us"]
+    Machine:
+      type: object
+      required: [id, hostname, cpu_model, physical_cores, logical_cpus, l1d_kb, l2_kb,
+                 l3_kb, memory_bytes, os, kernel, compiler, compiler_flags,
+                 engine_version, engine_git_sha]
+      properties:
+        id: { type: string, pattern: "^[0-9a-f]{32}$" }
+        hostname: { type: string }
+        cpu_model: { type: string }
+        physical_cores: { type: integer, minimum: 1 }
+        logical_cpus: { type: integer, minimum: 1 }
+        l1d_kb: { type: integer, minimum: 0 }
+        l2_kb: { type: integer, minimum: 0 }
+        l3_kb: { type: integer, minimum: 0 }
+        memory_bytes: { type: integer, minimum: 0 }
+        os: { type: string }
+        kernel: { type: string }
+        compiler: { type: string }
+        compiler_flags: { type: string }
+        engine_version: { type: string }
+        engine_git_sha: { type: string }
+        virtualized: { type: string }
+    Result:
+      type: object
+      required: [workload, thread_count, working_set_bytes, metric, value, unit, trial,
+                 timestamp, duration_ns]
+      properties:
+        workload: { $ref: "#/components/schemas/Workload" }
+        thread_count: { type: integer, minimum: 1 }
+        working_set_bytes: { type: integer, minimum: 0 }
+        metric: { $ref: "#/components/schemas/Metric" }
+        value: { type: number }
+        unit: { $ref: "#/components/schemas/Unit" }
+        trial: { type: integer, minimum: 0 }
+        timestamp: { type: string, format: date-time }
+        duration_ns: { type: integer, minimum: 1 }
+        params: { type: object, additionalProperties: true }
+    Summary:
+      type: object
+      required: [workload, metric, thread_count, working_set_bytes, n, mean, median,
+                 stddev, cov, min, p5, p95, max]
+      properties:
+        workload: { $ref: "#/components/schemas/Workload" }
+        metric: { $ref: "#/components/schemas/Metric" }
+        thread_count: { type: integer, minimum: 1 }
+        working_set_bytes: { type: integer, minimum: 0 }
+        n: { type: integer, minimum: 1 }
+        mean: { type: number }
+        median: { type: number }
+        stddev: { type: number }
+        cov: { type: number }
+        min: { type: number }
+        p5: { type: number }
+        p95: { type: number }
+        max: { type: number }
+        mad: { type: number }
+    RunEnvelope:
+      type: object
+      required: [schema_version, run_id, started_at, finished_at, machine, argv, results]
+      properties:
+        schema_version: { type: integer, enum: [1] }
+        run_id: { type: string, format: uuid }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+        machine: { $ref: "#/components/schemas/Machine" }
+        argv: { type: array, items: { type: string } }
+        results: { type: array, items: { $ref: "#/components/schemas/Result" } }
+        summary: { type: array, items: { $ref: "#/components/schemas/Summary" } }
+    IngestResult:
+      type: object
+      required: [run_id, inserted]
+      properties:
+        run_id: { type: string }
+        inserted: { type: integer }
+        duplicate: { type: boolean }
+        machine_id: { type: string }
+    Measurement:
+      type: object
+      required: [id, run_id, machine_id, workload, metric, thread_count,
+                 working_set_bytes, trial, value, unit, recorded_at, duration_ns]
+      properties:
+        id: { type: integer, format: int64 }
+        run_id: { type: string }
+        machine_id: { type: string }
+        workload: { $ref: "#/components/schemas/Workload" }
+        metric: { $ref: "#/components/schemas/Metric" }
+        thread_count: { type: integer }
+        working_set_bytes: { type: integer, format: int64 }
+        trial: { type: integer }
+        value: { type: number }
+        unit: { $ref: "#/components/schemas/Unit" }
+        recorded_at: { type: string, format: date-time }
+        duration_ns: { type: integer, format: int64 }
+        params: { type: object, additionalProperties: true }
+    MeasurementPage:
+      type: object
+      required: [measurements]
+      properties:
+        measurements: { type: array, items: { $ref: "#/components/schemas/Measurement" } }
+        next_cursor: { type: string }
+    Readiness:
+      type: object
+      properties:
+        status: { type: string }
+        postgres: { type: string }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: array, items: { type: string } }
