@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/matthewlee/benchmark-platform/api/internal/cache"
 	"github.com/matthewlee/benchmark-platform/api/internal/config"
 	httpapi "github.com/matthewlee/benchmark-platform/api/internal/http"
 	"github.com/matthewlee/benchmark-platform/api/internal/store"
@@ -33,10 +34,25 @@ func main() {
 	}
 	defer st.Close()
 
+	rc, err := cache.New(cache.Options{URL: cfg.RedisURL, TTL: cfg.CacheTTL, Log: log})
+	if err != nil {
+		// A malformed REDIS_URL is a configuration error worth failing on; an unreachable
+		// Redis is not, and is handled per request.
+		log.Error("bad REDIS_URL", "err", err)
+		os.Exit(1)
+	}
+	defer rc.Close()
+	if rc.Enabled() {
+		if err := rc.Ping(startCtx); err != nil {
+			log.Warn("redis not reachable at startup; serving from postgres", "err", err)
+		}
+	}
+
 	srv := httpapi.NewServer(st, httpapi.Options{
 		Log:            log,
 		MaxResults:     cfg.MaxResults,
 		HandlerTimeout: cfg.HandlerLimit,
+		Cache:          rc,
 	})
 	server := &http.Server{
 		Addr:    cfg.Addr,
@@ -53,7 +69,8 @@ func main() {
 
 	go func() {
 		log.Info("listening", "addr", cfg.Addr, "pg_max_conns", cfg.PGMaxConns,
-			"gomaxprocs", runtime.GOMAXPROCS(0), "max_results", cfg.MaxResults)
+			"gomaxprocs", runtime.GOMAXPROCS(0), "max_results", cfg.MaxResults,
+			"cache", rc.Enabled(), "cache_ttl", cfg.CacheTTL)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("server stopped", "err", err)
 			os.Exit(1)

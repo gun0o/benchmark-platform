@@ -1,0 +1,155 @@
+# M5.3 verify — cache behaviour, 2026-09-21T21:45:52Z
+# synthetic-01 = ee1cfec3ffcbffd7f25d0e0afd92a5bc
+# synthetic-02 = 99603cddab4c9611187e9598ab33465b
+
+## Miss then hit, with timings (20 requests of the same query)
+Traceback (most recent call last):
+  File "<string>", line 10, in <module>
+  File "<string>", line 8, in q
+IndexError: list index out of range
+  misses: n=0   ms
+
+## What Redis actually holds (one key per distinct query, plus the per-machine set)
+agg|group_by=working_set_bytes|machine_id=ee1cfec3ffcbffd7f25d0e0afd92a5bc|metric=mem_read_bw|thread_count=4
+keys:machine:ee1cfec3ffcbffd7f25d0e0afd92a5bc
+
+## A second, different query adds exactly one key
+agg|group_by=working_set_bytes|machine_id=ee1cfec3ffcbffd7f25d0e0afd92a5bc|metric=mem_read_bw|thread_count=4
+agg|machine_id=99603cddab4c9611187e9598ab33465b|metric=cpu_int_ops
+agg|machine_id=ee1cfec3ffcbffd7f25d0e0afd92a5bc|metric=cpu_int_ops
+cmp|metric=cpu_int_ops|machines=ee1cfec3ffcbffd7f25d0e0afd92a5bc,99603cddab4c9611187e9598ab33465b
+keys:machine:99603cddab4c9611187e9598ab33465b
+keys:machine:ee1cfec3ffcbffd7f25d0e0afd92a5bc
+trials|downsample=lttb:50|machine_id=ee1cfec3ffcbffd7f25d0e0afd92a5bc|metric=cpu_int_ops|thread_count=4
+
+## Miss vs hit timings (python urllib, localhost, 40 hits each)
+  aggregates (mem_read_bw over 6 working sets)
+    miss: 6.68 ms   hit: p50 0.48 ms  p95 0.66 ms  min 0.40  n=40
+    speedup: 13.8x     p50 hit < 2 ms: YES
+  trials (100 points)
+    miss: 2.74 ms   hit: p50 0.47 ms  p95 0.60 ms  min 0.41  n=40
+    speedup: 5.8x     p50 hit < 2 ms: YES
+
+## Ingest for one machine evicts that machine's keys and nothing else
+before the ingest:
+    agg|group_by=working_set_bytes|machine_id=ee1cfec3ffcbffd7f25d0e0afd92a5bc|metric=mem_read_bw
+    agg|machine_id=99603cddab4c9611187e9598ab33465b|metric=cpu_int_ops
+    agg|machine_id=ee1cfec3ffcbffd7f25d0e0afd92a5bc|metric=cpu_int_ops
+    keys:machine:99603cddab4c9611187e9598ab33465b
+    keys:machine:ee1cfec3ffcbffd7f25d0e0afd92a5bc
+    trials|machine_id=99603cddab4c9611187e9598ab33465b|metric=cpu_int_ops|thread_count=1
+
+$ bench run --workload cpu_int --trials 3 --post http://localhost:8080   # the real machine, neither synthetic
+bench: POST http://localhost:8080/v1/runs -> 200 (3 results, 3689 bytes)
+{"run_id":"1a036d72-ac99-4098-8f4c-cd1ff4221ab0","results":3,"inserted":3,"skipped":0,"duplicate":false,"machine_id":"7fea9ecafd05d7a64f0fcd74cf35f695"}
+after an ingest for a third machine (nothing of -01 or -02 should go):
+    agg|group_by=working_set_bytes|machine_id=ee1cfec3ffcbffd7f25d0e0afd92a5bc|metric=mem_read_bw
+    agg|machine_id=99603cddab4c9611187e9598ab33465b|metric=cpu_int_ops
+    agg|machine_id=ee1cfec3ffcbffd7f25d0e0afd92a5bc|metric=cpu_int_ops
+    keys:machine:99603cddab4c9611187e9598ab33465b
+    keys:machine:ee1cfec3ffcbffd7f25d0e0afd92a5bc
+    trials|machine_id=99603cddab4c9611187e9598ab33465b|metric=cpu_int_ops|thread_count=1
+
+$ post a synthetic-02 run (one trial, already stored -> 0 inserted, but still an ingest)
+Traceback (most recent call last):
+  File "<stdin>", line 14, in <module>
+  File "/home/matthewlee/.pyenv/versions/3.11.10/lib/python3.11/urllib/request.py", line 216, in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/matthewlee/.pyenv/versions/3.11.10/lib/python3.11/urllib/request.py", line 525, in open
+    response = meth(req, response)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/home/matthewlee/.pyenv/versions/3.11.10/lib/python3.11/urllib/request.py", line 634, in http_response
+    response = self.parent.error(
+               ^^^^^^^^^^^^^^^^^^
+  File "/home/matthewlee/.pyenv/versions/3.11.10/lib/python3.11/urllib/request.py", line 563, in error
+    return self._call_chain(*args)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/matthewlee/.pyenv/versions/3.11.10/lib/python3.11/urllib/request.py", line 496, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/home/matthewlee/.pyenv/versions/3.11.10/lib/python3.11/urllib/request.py", line 643, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 400: Bad Request
+after an ingest for synthetic-02 (only -02's keys should be gone):
+    agg|group_by=working_set_bytes|machine_id=ee1cfec3ffcbffd7f25d0e0afd92a5bc|metric=mem_read_bw
+    agg|machine_id=99603cddab4c9611187e9598ab33465b|metric=cpu_int_ops
+    agg|machine_id=ee1cfec3ffcbffd7f25d0e0afd92a5bc|metric=cpu_int_ops
+    keys:machine:99603cddab4c9611187e9598ab33465b
+    keys:machine:ee1cfec3ffcbffd7f25d0e0afd92a5bc
+    trials|machine_id=99603cddab4c9611187e9598ab33465b|metric=cpu_int_ops|thread_count=1
+
+# the API's log line for the eviction:
+
+## Per-machine invalidation
+cached keys before the ingest:
+    agg|group_by=working_set_bytes|machine_id=ee1cfec3ffcbffd7f25d0e0afd92a5bc|metric=mem_read_bw
+    agg|machine_id=99603cddab4c9611187e9598ab33465b|metric=cpu_int_ops
+    agg|machine_id=ee1cfec3ffcbffd7f25d0e0afd92a5bc|metric=cpu_int_ops
+    cmp|metric=cpu_int_ops|machines=ee1cfec3ffcbffd7f25d0e0afd92a5bc,99603cddab4c9611187e9598ab33465b
+    keys:machine:99603cddab4c9611187e9598ab33465b
+    keys:machine:ee1cfec3ffcbffd7f25d0e0afd92a5bc
+    trials|machine_id=99603cddab4c9611187e9598ab33465b|metric=cpu_int_ops|thread_count=1
+
+POST /v1/runs for synthetic-02 -> {"run_id":"12121212-3434-4545-8656-767676767676","results":1,"inserted":1,"skipped":0,"duplicate":false,"machine_id":"99603cddab4c9611187e9598ab33465b"}
+
+cached keys after:
+    agg|group_by=working_set_bytes|machine_id=ee1cfec3ffcbffd7f25d0e0afd92a5bc|metric=mem_read_bw
+    agg|machine_id=ee1cfec3ffcbffd7f25d0e0afd92a5bc|metric=cpu_int_ops
+    keys:machine:ee1cfec3ffcbffd7f25d0e0afd92a5bc
+
+and the next request for each machine:
+   agg  -01 cpu_int_ops     hit
+   agg  -01 mem_read_bw     hit
+   agg  -02 cpu_int_ops     miss
+   trials -02 cpu_int_ops   miss
+   compare -01 vs -02       miss
+
+# the API's own log line:
+    {"time":"2026-09-21T16:47:39.827991614-05:00","level":"INFO","msg":"cache invalidated","machine_id":"99603cddab4c9611187e9598ab33465b","keys":3}
+
+## With Redis stopped: the endpoints keep working and /readyz stays 200
+$ docker compose stop redis
+ Container bench-redis  Stopped
+$ curl -sS localhost:8080/readyz
+{"postgres":"ok","redis":"degraded","status":"ok"}
+ (HTTP 200)
+$ curl -sS -D- '.../v1/aggregates?...' | head
+HTTP/1.1 200 OK
+X-Cache: miss
+   answered from postgres: 5 groups, first median 3.899e+09
+$ curl -sS localhost:8080/v1/compare, /v1/trials
+   compare: HTTP 200 in 3.447481s
+   trials:  HTTP 200 in 3.359997s
+# what the API logged (once, not once per request):
+    {"time":"2026-09-21T16:48:01.904792331-05:00","level":"WARN","msg":"redis unavailable, serving from postgres","op":"get","err":"dial tcp 127.0.0.1:6379: connect: connection refused","suppressed_since_last":0}
+
+$ docker compose start redis
+ Container bench-redis  Started
+{"postgres":"ok","redis":"ok","status":"ok"}
+ (HTTP 200)
+
+## The same check after adding the circuit breaker
+   (before it: compare and trials took 3.4 s each with Redis down, because go-redis
+    retried a dead server three times per operation)
+$ docker compose stop redis
+ Container bench-redis  Stopped
+{"postgres":"ok","redis":"degraded","status":"ok"}
+ (HTTP 200)
+   request 1: HTTP 200  0.810792s
+   request 2: HTTP 200  0.806835s
+   request 3: HTTP 200  0.001302s
+   request 4: HTTP 200  0.001150s
+   request 5: HTTP 200  0.001295s
+   request 6: HTTP 200  0.001232s
+   request 7: HTTP 200  0.001082s
+   request 8: HTTP 200  0.001052s
+   compare: HTTP 200 in 0.003336s
+   trials:  HTTP 200 in 0.001968s
+# logged once, with the circuit state:
+    {"time":"2026-09-21T16:49:29.853838036-05:00","level":"WARN","msg":"redis unavailable, serving from postgres","op":"get","err":"dial tcp 127.0.0.1:6379: connect: connection refused","suppressed_since_last":0,"circuit_open_for":"30s","tripped":false}
+$ docker compose start redis
+ Container bench-redis  Started
+{"postgres":"ok","redis":"ok","status":"ok"}
+ (HTTP 200)
+   (the circuit reopens after its 30 s cooldown; until then requests skip Redis)

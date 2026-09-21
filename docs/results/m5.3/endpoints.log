@@ -1,0 +1,49 @@
+# M5.3 — the three analytics endpoints, 2026-09-21T21:49:56Z
+
+$ curl '/v1/aggregates?machine_id=<synthetic-01>&metric=cpu_int_ops'
+  metric cpu_int_ops (ops/s), grouped by thread_count
+  THREADS     N           MEAN         MEDIAN      CoV%             P5            P95
+       1   100      3.901e+09      3.899e+09     0.955      3.839e+09      3.956e+09
+       2   100      7.772e+09      7.776e+09     1.024      7.638e+09      7.902e+09
+       4   100      1.542e+10      1.541e+10     1.185      1.515e+10      1.569e+10
+       8   100      3.033e+10      3.031e+10     1.020      2.985e+10      3.086e+10
+      16   100      5.879e+10      5.876e+10     1.023      5.783e+10      5.973e+10
+
+$ curl '/v1/aggregates?machine_id=<synthetic-01>&metric=mem_latency&group_by=working_set_bytes&thread_count=1'
+   WORKING SET     N     MEDIAN       MEAN     CoV%
+         4 KiB   100       0.91       0.91    1.498
+        32 KiB   100       1.99       2.00    1.533
+       128 KiB   100       3.10       3.10    1.398
+       512 KiB   100       5.03       5.04    1.347
+         2 MiB   100      15.10      15.08    1.420
+         8 MiB   100      16.93      16.93    1.439
+        32 MiB   100      17.32      17.30    1.365
+       256 MiB   100      54.40      54.45    1.391
+         1 GiB   100      93.77      93.74    1.388
+
+$ curl '/v1/compare?machines=<synthetic-01>,<synthetic-03>&metric=cpu_int_ops'
+  baseline: ee1cfec3ffcb...  groups: [1, 2, 4, 8, 16]
+  synthetic-01   median 3.9e+09 7.78e+09 1.54e+10 3.03e+10 5.88e+10
+                 ratio  1.000 1.000 1.000 1.000 1.000
+  synthetic-03   median 3.1e+09 5.67e+09 7.08e+09 1.07e+10 1.46e+10
+                 ratio  0.795 0.729 0.459 0.354 0.249
+
+$ curl '/v1/trials?machine_id=<synthetic-01>&metric=cpu_int_ops&thread_count=4' (compact triples)
+  n=100 unit=ops/s
+    [0, 15171105834.415403, "2026-08-23T09:00:10.653000Z"]
+    [1, 15146467498.570847, "2026-08-23T09:00:10.706000Z"]
+    [2, 15515603893.252192, "2026-08-23T09:00:10.759000Z"]
+    ...
+
+$ the same with &downsample=lttb:20, and the byte sizes of both
+  full:       5468 bytes
+  lttb:20:    1203 bytes
+  full+gzip:  1695 bytes
+
+$ the aggregate endpoints refuse an unfiltered question
+{"error":{"code":"missing_filter","message":"machine_id and metric are required; an aggregate over every machine and metric is not a question this endpoint answers"}}
+ (HTTP 400)
+{"error":{"code":"invalid_query","message":"machines must list at least two machine ids, comma-separated"}}
+ (HTTP 400)
+{"error":{"code":"invalid_query","message":"group_by must be thread_count or working_set_bytes, got \"hostname\""}}
+ (HTTP 400)

@@ -172,6 +172,87 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+  /v1/aggregates:
+    get:
+      summary: Per-group statistics for one machine and metric.
+      description: |
+        machine_id and metric are required: percentile_cont over the whole table is not a
+        question this endpoint answers. Grouped by thread_count (default) or
+        working_set_bytes; the other dimension may be pinned with its own parameter.
+        Answers are cached in Redis for CACHE_TTL and invalidated by an ingest for the
+        machine. `X-Cache: hit|miss` says which path served the request.
+      operationId: getAggregates
+      parameters:
+        - { name: machine_id, in: query, required: true, schema: { type: string } }
+        - { name: metric, in: query, required: true, schema: { $ref: "#/components/schemas/Metric" } }
+        - { name: workload, in: query, schema: { $ref: "#/components/schemas/Workload" } }
+        - { name: group_by, in: query, schema: { type: string, enum: [thread_count, working_set_bytes], default: thread_count } }
+        - { name: thread_count, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: working_set_bytes, in: query, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: one entry per group
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AggregateResponse" }
+        "400":
+          description: missing or invalid filter
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/compare:
+    get:
+      summary: Aligned series for several machines, with the ratio to the first.
+      operationId: getCompare
+      parameters:
+        - name: machines
+          in: query
+          required: true
+          description: Two to eight machine ids, comma-separated. The first is the baseline.
+          schema: { type: string }
+        - { name: metric, in: query, required: true, schema: { $ref: "#/components/schemas/Metric" } }
+        - { name: workload, in: query, schema: { $ref: "#/components/schemas/Workload" } }
+        - { name: group_by, in: query, schema: { type: string, enum: [thread_count, working_set_bytes], default: thread_count } }
+        - { name: thread_count, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: working_set_bytes, in: query, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: one series per machine over the union of their group values
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompareResponse" }
+        "400":
+          description: missing or invalid filter
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/trials:
+    get:
+      summary: Individual trial values for one configuration, in a compact shape.
+      description: |
+        Points are `[trial, value, recorded_at]` triples rather than objects, because the
+        Trials page loads up to 10,000 of them. `downsample=lttb:N` applies
+        Largest-Triangle-Three-Buckets server-side, keeping the extremes.
+      operationId: getTrials
+      parameters:
+        - { name: machine_id, in: query, required: true, schema: { type: string } }
+        - { name: metric, in: query, required: true, schema: { $ref: "#/components/schemas/Metric" } }
+        - { name: workload, in: query, schema: { $ref: "#/components/schemas/Workload" } }
+        - { name: thread_count, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: working_set_bytes, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 10000, default: 10000 } }
+        - { name: downsample, in: query, schema: { type: string, pattern: "^lttb:[0-9]+$" } }
+      responses:
+        "200":
+          description: the trial series
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrialsResponse" }
+        "400":
+          description: missing or invalid filter
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 components:
   schemas:
     Workload:
@@ -265,15 +346,33 @@ components:
         duplicate: { type: boolean, description: Nothing in this request was new. }
         machine_id: { type: string }
     MachineRow:
-      allOf:
-        - $ref: "#/components/schemas/Machine"
-        - type: object
-          required: [first_seen, last_seen]
-          properties:
-            first_seen: { type: string, format: date-time }
-            last_seen: { type: string, format: date-time }
-            runs: { type: integer }
-            measurements: { type: integer }
+      type: object
+      description: |
+        A stored machine. Unlike the envelope's machine block it carries no
+        engine_version or engine_git_sha: those describe the engine that produced a run,
+        and live on Run.
+      required: [id, hostname, cpu_model, physical_cores, logical_cpus, l1d_kb, l2_kb,
+                 l3_kb, memory_bytes, os, kernel, compiler, compiler_flags, first_seen,
+                 last_seen]
+      properties:
+        id: { type: string, pattern: "^[0-9a-f]{32}$" }
+        hostname: { type: string }
+        cpu_model: { type: string }
+        physical_cores: { type: integer }
+        logical_cpus: { type: integer }
+        l1d_kb: { type: integer }
+        l2_kb: { type: integer }
+        l3_kb: { type: integer }
+        memory_bytes: { type: integer, format: int64 }
+        os: { type: string }
+        kernel: { type: string }
+        compiler: { type: string }
+        compiler_flags: { type: string }
+        virtualized: { type: string }
+        first_seen: { type: string, format: date-time }
+        last_seen: { type: string, format: date-time }
+        runs: { type: integer }
+        measurements: { type: integer }
     Run:
       type: object
       required: [id, machine_id, engine_version, engine_git_sha, started_at, finished_at,
@@ -312,11 +411,83 @@ components:
       properties:
         measurements: { type: array, items: { $ref: "#/components/schemas/Measurement" } }
         next_cursor: { type: string }
+    AggregateGroup:
+      type: object
+      required: [group, n, mean, median, stddev, cov, min, p5, p95, max]
+      properties:
+        group: { type: integer, format: int64, description: The value of the group_by column. }
+        n: { type: integer, format: int64 }
+        mean: { type: number }
+        median: { type: number, description: percentile_cont(0.5), i.e. numpy's linear interpolation. }
+        stddev: { type: number, description: Sample standard deviation (n-1). }
+        cov: { type: number, description: stddev / mean. }
+        min: { type: number }
+        p5: { type: number }
+        p95: { type: number }
+        max: { type: number }
+    AggregateResponse:
+      type: object
+      required: [machine_id, metric, unit, group_by, groups]
+      properties:
+        machine_id: { type: string }
+        metric: { $ref: "#/components/schemas/Metric" }
+        workload: { $ref: "#/components/schemas/Workload" }
+        unit: { $ref: "#/components/schemas/Unit" }
+        group_by: { type: string, enum: [thread_count, working_set_bytes] }
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/AggregateGroup" }
+    CompareSeries:
+      type: object
+      required: [machine_id, hostname, groups, median, mean, n, ratio]
+      properties:
+        machine_id: { type: string }
+        hostname: { type: string }
+        groups: { type: array, items: { type: integer, format: int64 } }
+        median: { type: array, items: { type: number } }
+        mean: { type: array, items: { type: number } }
+        n: { type: array, items: { type: integer, format: int64 } }
+        ratio:
+          type: array
+          items: { type: number }
+          description: This machine's median divided by the baseline's, per group.
+    CompareResponse:
+      type: object
+      required: [metric, unit, group_by, baseline, groups, series]
+      properties:
+        metric: { $ref: "#/components/schemas/Metric" }
+        workload: { $ref: "#/components/schemas/Workload" }
+        unit: { $ref: "#/components/schemas/Unit" }
+        group_by: { type: string, enum: [thread_count, working_set_bytes] }
+        baseline: { type: string, description: The machine every ratio is relative to. }
+        groups: { type: array, items: { type: integer, format: int64 } }
+        series:
+          type: array
+          items: { $ref: "#/components/schemas/CompareSeries" }
+    TrialsResponse:
+      type: object
+      required: [machine_id, metric, unit, n, points]
+      properties:
+        machine_id: { type: string }
+        metric: { $ref: "#/components/schemas/Metric" }
+        unit: { $ref: "#/components/schemas/Unit" }
+        n: { type: integer }
+        downsample: { type: string }
+        points:
+          type: array
+          description: "[trial, value, recorded_at] triples."
+          items:
+            type: array
+            prefixItems:
+              - { type: integer }
+              - { type: number }
+              - { type: string, format: date-time }
     Readiness:
       type: object
       properties:
         status: { type: string }
         postgres: { type: string }
+        redis: { type: string, enum: [ok, degraded, disabled] }
     Error:
       type: object
       required: [error]

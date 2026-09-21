@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/matthewlee/benchmark-platform/api/internal/cache"
 	"github.com/matthewlee/benchmark-platform/api/internal/model"
 	"github.com/matthewlee/benchmark-platform/api/internal/store"
 )
@@ -23,12 +24,16 @@ type Store interface {
 	GetMachine(ctx context.Context, id string) (model.MachineRow, error)
 	ListRuns(ctx context.Context, machineID string, limit int) ([]model.Run, error)
 	GetRun(ctx context.Context, id string) (model.Run, error)
+	Aggregates(ctx context.Context, f store.MeasurementFilter, by store.GroupBy) (store.AggregateResponse, error)
+	Compare(ctx context.Context, machineIDs []string, f store.MeasurementFilter, by store.GroupBy) (store.CompareResponse, error)
+	Trials(ctx context.Context, f store.MeasurementFilter) ([]store.TrialPoint, error)
 	Ping(ctx context.Context) error
 }
 
 // Server holds the handler dependencies.
 type Server struct {
 	store   Store
+	cache   *cache.Cache // nil or disabled means every request goes to Postgres
 	log     *slog.Logger
 	maxRes  int           // largest number of results one POST /v1/runs may carry
 	timeout time.Duration // per-handler context deadline
@@ -39,6 +44,7 @@ type Options struct {
 	Log            *slog.Logger
 	MaxResults     int
 	HandlerTimeout time.Duration
+	Cache          *cache.Cache
 }
 
 // DefaultMaxResults is the ingest size limit. Larger runs are chunked by the client; the
@@ -59,7 +65,7 @@ func NewServer(s Store, opts Options) *Server {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
-	return &Server{store: s, log: log, maxRes: maxRes, timeout: timeout}
+	return &Server{store: s, cache: opts.Cache, log: log, maxRes: maxRes, timeout: timeout}
 }
 
 // Routes returns the mux. Go 1.22 method patterns mean the method is part of the pattern,
@@ -74,6 +80,9 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("GET /v1/machines/{id}", s.handleGetMachine)
 	mux.HandleFunc("GET /v1/runs", s.handleListRuns)
 	mux.HandleFunc("GET /v1/runs/{id}", s.handleGetRun)
+	mux.HandleFunc("GET /v1/aggregates", s.handleAggregates)
+	mux.HandleFunc("GET /v1/compare", s.handleCompare)
+	mux.HandleFunc("GET /v1/trials", s.handleTrials)
 	return mux
 }
 

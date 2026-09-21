@@ -119,13 +119,31 @@ func (r *Run) UTC() {
 	r.StartedAt, r.FinishedAt, r.IngestedAt = r.StartedAt.UTC(), r.FinishedAt.UTC(), r.IngestedAt.UTC()
 }
 
-// MachineRow is a stored machine with its first/last sighting.
+// MachineRow is a stored machine with its first and last sighting.
+//
+// It deliberately does not embed Machine. The envelope's machine block carries
+// engine_version and engine_git_sha, but those describe the *engine that produced a run*,
+// not the machine, and the machines table does not store them - so a response built by
+// embedding would advertise two fields that are always empty. They live on Run.
 type MachineRow struct {
-	Machine
-	FirstSeen    time.Time `json:"first_seen"`
-	LastSeen     time.Time `json:"last_seen"`
-	Runs         int64     `json:"runs,omitempty"`
-	Measurements int64     `json:"measurements,omitempty"`
+	ID            string    `json:"id"`
+	Hostname      string    `json:"hostname"`
+	CPUModel      string    `json:"cpu_model"`
+	PhysicalCores int       `json:"physical_cores"`
+	LogicalCPUs   int       `json:"logical_cpus"`
+	L1dKB         int       `json:"l1d_kb"`
+	L2KB          int       `json:"l2_kb"`
+	L3KB          int       `json:"l3_kb"`
+	MemoryBytes   int64     `json:"memory_bytes"`
+	OS            string    `json:"os"`
+	Kernel        string    `json:"kernel"`
+	Compiler      string    `json:"compiler"`
+	CompilerFlags string    `json:"compiler_flags"`
+	Virtualized   string    `json:"virtualized,omitempty"`
+	FirstSeen     time.Time `json:"first_seen"`
+	LastSeen      time.Time `json:"last_seen"`
+	Runs          int64     `json:"runs,omitempty"`
+	Measurements  int64     `json:"measurements,omitempty"`
 }
 
 var (

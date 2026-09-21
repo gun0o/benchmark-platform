@@ -20,12 +20,20 @@ func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
-	body := map[string]string{"status": "ok", "postgres": "ok"}
+	body := map[string]string{"status": "ok", "postgres": "ok", "redis": "disabled"}
 	if err := s.store.Ping(r.Context()); err != nil {
 		body["status"] = "unready"
 		body["postgres"] = err.Error()
 		writeJSON(w, http.StatusServiceUnavailable, body)
 		return
+	}
+	// Redis is an optimization, so its absence is reported and is not an outage: the
+	// endpoints still answer, from Postgres, and /readyz stays 200.
+	if s.cache.Enabled() {
+		body["redis"] = "ok"
+		if err := s.cache.Ping(r.Context()); err != nil {
+			body["redis"] = "degraded"
+		}
 	}
 	writeJSON(w, http.StatusOK, body)
 }
@@ -37,6 +45,11 @@ func (s *Server) handleIngestRun(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.writeIngestError(w, err)
 		return
+	}
+	// New rows for this machine make every cached answer about it stale, and nothing
+	// else: machine A's ingest must not evict machine B's aggregates.
+	if evicted := s.cache.InvalidateMachine(r.Context(), res.MachineID); evicted > 0 {
+		s.log.Info("cache invalidated", "machine_id", res.MachineID, "keys", evicted)
 	}
 	s.log.Info("ingested run", "run_id", res.RunID, "machine_id", res.MachineID,
 		"results", res.Results, "inserted", res.Inserted, "skipped", res.Skipped,

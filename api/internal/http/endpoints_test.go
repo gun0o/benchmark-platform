@@ -12,10 +12,8 @@ import (
 func fakeWithInventory() *fakeStore {
 	f := newFake()
 	f.machines = []model.MachineRow{{
-		Machine: model.Machine{
-			ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Hostname: "wsl-thinkpad",
-			CPUModel: "Intel(R) Core(TM) Ultra 9 185H", PhysicalCores: 11, LogicalCPUs: 22,
-		},
+		ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Hostname: "wsl-thinkpad",
+		CPUModel: "Intel(R) Core(TM) Ultra 9 185H", PhysicalCores: 11, LogicalCPUs: 22,
 		FirstSeen: time.Now().Add(-48 * time.Hour), LastSeen: time.Now(), Runs: 3,
 		Measurements: 1234,
 	}}
@@ -24,6 +22,27 @@ func fakeWithInventory() *fakeStore {
 		{ID: "11111111-2222-4333-8444-666666666666", MachineID: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
 	}
 	return f
+}
+
+// A machine response must not advertise fields the machines table cannot fill: the engine
+// version belongs to a run, not to a box.
+func TestMachineResponseHasNoEngineFields(t *testing.T) {
+	h := newServer(t, fakeWithInventory())
+	rec := get(t, h, "/v1/machines/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	var raw map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	for _, key := range []string{"engine_version", "engine_git_sha"} {
+		if _, ok := raw[key]; ok {
+			t.Fatalf("machine response carries %q, which it can never populate", key)
+		}
+	}
+	for _, key := range []string{"id", "hostname", "cpu_model", "first_seen", "last_seen"} {
+		if _, ok := raw[key]; !ok {
+			t.Fatalf("machine response is missing %q", key)
+		}
+	}
 }
 
 func TestMachinesEndpoints(t *testing.T) {

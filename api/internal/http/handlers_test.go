@@ -21,15 +21,20 @@ import (
 // fakeStore records what the handlers asked for and answers from memory. The handler
 // tests need no Postgres; the store's own SQL is covered by the integration tests.
 type fakeStore struct {
-	ingested   []*model.RunEnvelope
-	seenRunIDs map[string]bool
-	rows       []model.Measurement
-	machines   []model.MachineRow
-	runs       []model.Run
-	lastFilter store.MeasurementFilter
-	ingestErr  error
-	listErr    error
-	pingErr    error
+	ingested     []*model.RunEnvelope
+	seenRunIDs   map[string]bool
+	rows         []model.Measurement
+	machines     []model.MachineRow
+	runs         []model.Run
+	aggregates   store.AggregateResponse
+	compare      store.CompareResponse
+	trials       []store.TrialPoint
+	lastGroupBy  store.GroupBy
+	lastMachines []string
+	lastFilter   store.MeasurementFilter
+	ingestErr    error
+	listErr      error
+	pingErr      error
 }
 
 func newFake() *fakeStore { return &fakeStore{seenRunIDs: map[string]bool{}} }
@@ -107,6 +112,28 @@ func (f *fakeStore) ListMeasurements(_ context.Context, filter store.Measurement
 		out = out[:filter.Limit]
 	}
 	return out, nil
+}
+
+func (f *fakeStore) Aggregates(_ context.Context, fl store.MeasurementFilter, by store.GroupBy) (store.AggregateResponse, error) {
+	f.lastFilter = fl
+	f.lastGroupBy = by
+	return f.aggregates, f.listErr
+}
+
+func (f *fakeStore) Compare(_ context.Context, ids []string, fl store.MeasurementFilter, by store.GroupBy) (store.CompareResponse, error) {
+	f.lastFilter = fl
+	f.lastGroupBy = by
+	f.lastMachines = ids
+	return f.compare, f.listErr
+}
+
+func (f *fakeStore) Trials(_ context.Context, fl store.MeasurementFilter) ([]store.TrialPoint, error) {
+	f.lastFilter = fl
+	out := f.trials
+	if fl.Limit > 0 && len(out) > fl.Limit {
+		out = out[:fl.Limit]
+	}
+	return out, f.listErr
 }
 
 func (f *fakeStore) Ping(context.Context) error { return f.pingErr }
