@@ -1,0 +1,8 @@
+--- free before cat ---
+               total        used        free      shared  buff/cache   available
+Mem:           15794        2336        9206           5        4251       13210
+Swap:           4096           0        4096
+--- free after cat (buff/cache should have grown by ~4 GiB) ---
+               total        used        free      shared  buff/cache   available
+Mem:           15794        2275        5170           5        8347       13271
+Swap:           4096           0        4096

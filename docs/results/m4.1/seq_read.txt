@@ -1,0 +1,5 @@
+machine: Intel(R) Core(TM) Ultra 9 185H  (Ubuntu 22.04.5 LTS)
+run 470fb2b0-567c-44a9-8e51-5416a61e1121  2026-09-21T17:22:30.355855Z -> 2026-09-21T17:22:37.779085Z
+METRIC        THR         WS       MEDIAN         MEAN     CoV% MAD/MED%      N          MIN          MAX   LATE%   ATT    CLK0    CLK1
+disk_seq_read_bw    1 4294967296         2690         2705     6.75     1.16      5         2483         2991     0.0     1    15.0    15.0
+disk_seq_read_bw    4 4294967296         6405         6385     4.65     4.22      5         6077         6811     0.0     1    16.6    15.0

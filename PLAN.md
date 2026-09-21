@@ -805,6 +805,55 @@ browser with zero manual steps beyond `make up` and `make bench`.
 - Random **write** tests wear SSDs and can be slow with `O_DSYNC`; default the total
   written per run to ≤ 1 GiB and require `--allow-writes`.
 - Delete the test file with `bench disk clean`; never leave 4 GiB in the repo.
+- Done 2026-09-21 (write-up: `docs/notes/M4.1.md`, runs: `docs/results/m4.1/`, caveats in
+  `docs/methodology.md`). Measured plugged in, Windows plan Balanced, power mode **Best
+  performance**; power state recorded before and after every run. 4 GiB test file on ext4 on
+  the VHDX; guest `MemAvailable` 13.4 GB at the time. All three Verify bullets pass.
+  Findings and deviations, all measured:
+  - **Verify 1 (strace) is clean**: `O_RDONLY|O_DIRECT` and `O_WRONLY|O_DSYNC|O_DIRECT` on
+    the test file; sequential transfers all 1048576 bytes, random all 4096 at 4096-aligned
+    offsets; 144 `pwrite64` to 9 `fdatasync`, exactly the 16:1 the code claims.
+  - **The fio comparison had to be run twice, and the first answer was wrong.** Run the
+    obvious way the engine looked **12-18 % faster** than fio. Run **alternating**, three
+    repetitions, every ratio is within **+/-5 %** (0.958-1.030 across sequential and random
+    reads at every thread count). The gap was drift - the Windows host's cache over the VHDX
+    - not a tool difference. This is M2.5's lesson in a new domain. For scale, fio's own
+    QD 1 answer moves 7763-8815 IOPS across four reasonable parameter choices. fio 3.36 was
+    **built from source** (not packaged, no root); commands recorded in `fio_compare.sh`.
+  - **Verify 3 (cold check) is decisive for the guest and silent about the host.** Ten
+    no-warmup trials, then the whole 4 GiB file read into the page cache (`buff/cache`
+    4251 -> 8347 MB), then ten more: **-0.1 %** (2377 vs 2375 MB/s). Trial 0 is *slower* than
+    the rest (0.88x) in both runs, the opposite of a caching effect. Host-side caching of the
+    VHDX remains unobservable from the guest, and every figure is labelled "virtual disk".
+  - **Numbers**: seq read 2690 / 6405 MB/s at 1 / 4 threads; seq write 1487 / 1951; rand read
+    9131 / 32808 / 89966 IOPS at QD 1 / 4 / 16 with p99 274 / 234 / 300 us; rand write
+    **512 / 554 / 585 IOPS** - barely scaling, because `O_DSYNC` flushes serialize. A durable
+    4 KiB write costs ~2 ms here, **18x** a 4 KiB read. p99 at QD 1 is 2.5x the mean, which is
+    why the metric exists next to IOPS.
+  - **A real race, found because every p99 came out 0.00.** The histogram is workload-owned
+    memory the slot only points at, so the runner's "all slot writes happen between the
+    barriers" invariant did not cover it: the worker leaves the end barrier and immediately
+    clears the histogram the main thread is still counting. Fixed with two alternating
+    buffers, plus a test whose only job is to fail if someone goes back to one. It resolved
+    *correctly* under ASan and in debug, which is the worst way for a race to behave.
+  - **A stale object file and the clock behind it.** Release segfaulted while debug ran clean:
+    `runner.cpp.o` had been built against the old header and read the new object through the
+    old layout. Ninja missed it because the WSL2 guest clock was **5 min 45 s behind the
+    Windows host** and six build files carried future timestamps; `cmake` eventually failed
+    with "manifest still dirty after 100 tries, perhaps system time is not set". Same clock,
+    same magnitude, as M3.2's 5 min 47 s envelope anomaly. Every *measured* number was correct
+    throughout, because all timing is `steady_clock`.
+  - **Deviations**: `fdatasync` per 16 MiB batch rather than per trial (a workload cannot see
+    a trial boundary; per batch is inside the timed region and stricter). The p99 is
+    nearest-rank on 1 us buckets, not the numpy-`linear` method the rest of the project uses -
+    interpolating between adjacent buckets would invent precision the samples do not have.
+    `disk_rand_read_p99_us` rides on the IOPS trial via M3.1's rider mechanism rather than
+    getting a configuration of its own.
+  - 20 additive `params` keys, schema first; no `schema_version` bump. `bench disk prep` and
+    `bench disk clean` added; `--disk-path`, `--allow-writes`, `--write-budget`,
+    `--i-know-this-is-9p`; `--trial-ms` defaults to 500 for disk. 17 new tests; **168/168 in
+    release, debug, ci, asan and tsan**; all 21 engine run files pass `bench validate` and
+    `check-jsonschema`.
 
 ---
 

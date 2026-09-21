@@ -1,0 +1,9 @@
+machine: Intel(R) Core(TM) Ultra 9 185H  (Ubuntu 22.04.5 LTS)
+run 50ab6dbd-6642-4aaa-94d0-fcf5a9bc8f76  2026-09-21T17:22:37.784921Z -> 2026-09-21T17:22:48.740939Z
+METRIC        THR         WS       MEDIAN         MEAN     CoV% MAD/MED%      N          MIN          MAX   LATE%   ATT    CLK0    CLK1
+disk_rand_read_iops    1 4294967296         9131         9228     2.81     0.79      5         9059         9679     0.0     1    14.9    15.9
+disk_rand_read_p99_us    1 4294967296          274          271    11.21     6.93      5          231          312     0.0     1    14.9    15.9
+disk_rand_read_iops    4 4294967296    3.281e+04    3.304e+04     1.33     0.31      5    3.271e+04    3.377e+04     0.0     1    15.7    15.5
+disk_rand_read_p99_us    4 4294967296          234        235.4     5.97     5.13      5          220          253     0.0     1    15.7    15.5
+disk_rand_read_iops   16 4294967296    8.997e+04    8.993e+04     4.41     1.52      5    8.461e+04    9.558e+04     0.0     1    15.4    15.3
+disk_rand_read_p99_us   16 4294967296          300        293.2     7.99     5.67      5          258          318     0.0     1    15.4    15.3

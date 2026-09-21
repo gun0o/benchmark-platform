@@ -8,6 +8,7 @@
 #include "bench/workloads/cpu_fp.hpp"
 #include "bench/workloads/cpu_hash.hpp"
 #include "bench/workloads/cpu_int.hpp"
+#include "bench/workloads/disk_io.hpp"
 #include "bench/workloads/mem_bw.hpp"
 #include "bench/workloads/mem_latency.hpp"
 
@@ -48,11 +49,11 @@ const std::vector<WorkloadDesc>& workload_registry() {
         {Workload::disk_seq,
          {Metric::disk_seq_read_bw, Metric::disk_seq_write_bw},
          "1 MiB O_DIRECT sequential read / write",
-         false},
+         true},
         {Workload::disk_rand,
          {Metric::disk_rand_read_iops, Metric::disk_rand_write_iops, Metric::disk_rand_read_p99_us},
          "4 KiB O_DIRECT random read / write, QD = threads",
-         false},
+         true},
     };
     return kRegistry;
 }
@@ -105,6 +106,9 @@ std::uint64_t default_working_set(Workload w) noexcept {
         return MemBwWorkload::kDefaultWorkingSet;
     case Workload::mem_latency:
         return MemLatencyWorkload::kDefaultWorkingSet;
+    case Workload::disk_seq:
+    case Workload::disk_rand:
+        return kDiskDefaultSize;
     default:
         return 0;
     }
@@ -116,6 +120,14 @@ std::uint64_t effective_working_set(Workload w, std::uint64_t requested) noexcep
         return MemBwWorkload::buffer_bytes_for(requested);
     case Workload::mem_latency:
         return MemLatencyWorkload::buffer_bytes_for(requested);
+    case Workload::disk_seq:
+    case Workload::disk_rand: {
+        // The working set is the test file's size. It must be a whole number of 1 MiB
+        // sequential blocks (which is also a whole number of 4 KiB random ones), so that
+        // both workloads can share one file without either reading past its end.
+        const std::uint64_t want = requested == 0 ? kDiskDefaultSize : requested;
+        return std::max<std::uint64_t>(1, want / kDiskSeqBlock) * kDiskSeqBlock;
+    }
     default:
         // cpu_* keep whatever was asked for; see the note in workload.hpp.
         return requested;
@@ -225,10 +237,6 @@ void worker(std::stop_token st, int index, const RunConfig& cfg, const WorkloadC
         // big the workload's region turned out to be. Its own buffer (evict mode) is
         // allocated and first-touched here, on this thread, never in the trial loop.
         cold.setup(cfg.cold, l3_kb, w.cold_region().size());
-        if constexpr (requires { w.latency_histogram(); }) {
-            const auto h = w.latency_histogram();
-            slot.hist = h.data();
-        }
         if (index == 0) {
             report.effect.store(cold.effect(), std::memory_order_relaxed);
             report.bytes.store(cold.bytes(), std::memory_order_relaxed);
@@ -299,8 +307,14 @@ void worker(std::stop_token st, int index, const RunConfig& cfg, const WorkloadC
         slot.end = now;
         slot.ops = ops;
         slot.batches = batches;
-        if constexpr (requires { w.latency_used_buckets(); })
+        // Published here rather than at setup, because a workload may alternate between
+        // two histograms so that the one the main thread is about to read is not the one
+        // the next trial's before_trial() clears.
+        if constexpr (requires { w.latency_histogram(); }) {
+            const auto h = w.latency_histogram();
+            slot.hist = h.data();
             slot.hist_used = w.latency_used_buckets();
+        }
         slot.cpu_end = sched_getcpu();
         end_b.arrive_and_wait();
     }
@@ -826,8 +840,12 @@ RunEnvelope run_benchmarks(const RunConfig& cfg, const MachineInfo& machine,
             return build.template operator()<CpuHashWorkload>();
         case Workload::mem_bw:
             return build.template operator()<MemBwWorkload>();
-        default:
+        case Workload::mem_latency:
             return build.template operator()<MemLatencyWorkload>();
+        case Workload::disk_seq:
+            return build.template operator()<DiskSeqWorkload>();
+        default:
+            return build.template operator()<DiskRandWorkload>();
         }
     };
 

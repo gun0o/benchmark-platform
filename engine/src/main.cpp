@@ -1,9 +1,10 @@
-// bench CLI: sysinfo | list | run | report | validate
+// bench CLI: sysinfo | list | run | report | validate | disk
 #include "bench/cache.hpp"
 #include "bench/result.hpp"
 #include "bench/runner.hpp"
 #include "bench/sysinfo.hpp"
 #include "bench/workload.hpp"
+#include "bench/workloads/disk_io.hpp"
 
 #include <CLI/CLI.hpp>
 #include <charconv>
@@ -116,10 +117,12 @@ int main(int argc, char** argv) {
     run->add_option("--working-set", ws_csv,
                     "Comma-separated working sets, e.g. 4K,1M,64M (default 0)");
     run->add_option("-n,--trials", cfg.trials, "Timed trials per configuration")->default_val(1);
-    run->add_option("--trial-ms", cfg.trial_ms,
-                    "Each trial runs whole batches until this many ms elapsed")
-        ->default_val(50)
-        ->check(CLI::PositiveNumber);
+    auto* trial_ms_opt =
+        run->add_option("--trial-ms", cfg.trial_ms,
+                        "Each trial runs whole batches until this many ms elapsed "
+                        "(default 50; 500 when any selected metric is a disk metric)")
+            ->default_val(50)
+            ->check(CLI::PositiveNumber);
     run->add_option("--warmup", cfg.warmup_trials,
                     "Minimum warmup trials per configuration, discarded")
         ->default_val(5)
@@ -156,6 +159,20 @@ int main(int argc, char** argv) {
                   "mem_bw write/copy use non-temporal (streaming) stores");
     run->add_flag("!--no-hugepages", cfg.opts.huge_pages,
                   "Do not ask for transparent huge pages for large buffers");
+    run->add_option("--disk-path", cfg.opts.disk_path,
+                    "Test file for the disk workloads (default " + bench::default_disk_path() +
+                        ")");
+    run->add_flag("--allow-writes", cfg.opts.allow_writes,
+                  "Permit the disk write metrics. They wear the SSD, so they are off unless "
+                  "asked for");
+    std::string write_budget = "1G";
+    run->add_option("--write-budget", write_budget,
+                    "Stop the run at a trial boundary once this many bytes have been written "
+                    "by the disk write metrics (0 = no limit)")
+        ->default_str("1G");
+    run->add_flag("--i-know-this-is-9p", cfg.opts.allow_9p,
+                  "Allow a --disk-path under /mnt, where O_DIRECT is ignored or fails and the "
+                  "numbers would be page-cache numbers wearing a disk's label");
     std::string cpus_csv;
     bool pin = false;
     run->add_flag("--pin", pin,
@@ -194,6 +211,63 @@ int main(int argc, char** argv) {
         }
         if (cfg.workloads.empty() && cfg.metrics.empty())
             throw CLI::ValidationError("--workload", "no workloads selected (or --all/--metric)");
+        cfg.opts.write_budget_bytes = parse_size(write_budget);
+
+        // The disk write metrics wear the SSD and, with O_DSYNC, are slow. They are gated.
+        // An explicit request for one without --allow-writes is an error, because silently
+        // running something else is worse than refusing; --all drops them with a note,
+        // because "run everything you can" should not need a second flag to mean anything.
+        const bool explicit_selection = !cfg.metrics.empty() || !workloads_csv.empty();
+        auto is_disk_write = [](bench::Metric m) {
+            return m == bench::Metric::disk_seq_write_bw ||
+                   m == bench::Metric::disk_rand_write_iops;
+        };
+        if (!cfg.opts.allow_writes) {
+            for (const auto m : cfg.metrics)
+                if (is_disk_write(m) && explicit_selection)
+                    throw CLI::ValidationError("--metric",
+                                               std::string{bench::to_string(m)} +
+                                                   " writes to the test file; pass --allow-writes");
+            std::erase_if(cfg.metrics, is_disk_write);
+            for (const auto w : cfg.workloads) {
+                for (const auto m : bench::metrics_of(w)) {
+                    if (!is_disk_write(m))
+                        continue;
+                    if (explicit_selection)
+                        throw CLI::ValidationError(
+                            "--workload", std::string{bench::to_string(w)} +
+                                              " includes write metrics; pass --allow-writes "
+                                              "or select --metric explicitly");
+                    std::cerr << std::format("bench: skipping {} (--allow-writes not given)\n",
+                                             bench::to_string(m));
+                }
+            }
+            if (!explicit_selection) {
+                // --all: keep the read metrics of every workload, drop the write ones.
+                std::vector<bench::Metric> keep;
+                for (const auto w : cfg.workloads)
+                    for (const auto m : bench::metrics_of(w))
+                        if (!is_disk_write(m))
+                            keep.push_back(m);
+                cfg.workloads.clear();
+                cfg.metrics = std::move(keep);
+            }
+        }
+
+        // Disk trials are longer by default. A 4 KiB O_DIRECT read is tens to hundreds of
+        // microseconds, so a 50 ms trial would hold a few hundred samples - too few for a
+        // p99 to mean anything. Only when the user did not say otherwise.
+        if (trial_ms_opt->count() == 0) {
+            bool any_disk = false;
+            for (const auto m : cfg.metrics)
+                any_disk = any_disk || bench::workload_of(m) == bench::Workload::disk_seq ||
+                           bench::workload_of(m) == bench::Workload::disk_rand;
+            for (const auto w : cfg.workloads)
+                any_disk =
+                    any_disk || w == bench::Workload::disk_seq || w == bench::Workload::disk_rand;
+            if (any_disk)
+                cfg.trial_ms = 500;
+        }
         cfg.thread_counts.clear();
         for (const auto& t : split_csv(threads_csv))
             cfg.thread_counts.push_back(std::stoi(t));
@@ -296,6 +370,42 @@ int main(int argc, char** argv) {
             std::cout << '\n';
         }
         std::exit(problems.empty() ? 0 : 2);
+    });
+
+    // ---- disk ----------------------------------------------------------------------
+    // The test file is gigabytes and lives outside the repository; `bench disk clean`
+    // exists so that is a one-word operation rather than a path the user has to remember.
+    auto* disk = app.add_subcommand("disk", "Manage the disk workloads' test file");
+    disk->require_subcommand(1);
+    std::string disk_path;
+    std::string disk_size = "4G";
+    bool disk_9p = false;
+    std::uint64_t disk_seed = 0;
+    auto add_disk_opts = [&](CLI::App* sub) {
+        sub->add_option("--disk-path", disk_path,
+                        "Test file (default " + bench::default_disk_path() + ")");
+        sub->add_flag("--i-know-this-is-9p", disk_9p, "Allow a path under /mnt");
+    };
+    auto* disk_prep = disk->add_subcommand("prep", "Create and fill the test file");
+    add_disk_opts(disk_prep);
+    disk_prep->add_option("--size", disk_size, "File size, e.g. 4G")->default_str("4G");
+    disk_prep->add_option("--seed", disk_seed, "Seed for the random fill")->default_val(0);
+    disk_prep->callback([&] {
+        const std::string path = disk_path.empty() ? bench::default_disk_path() : disk_path;
+        bench::check_disk_path(path, disk_9p);
+        const std::uint64_t bytes = parse_size(disk_size);
+        const std::uint64_t written = bench::ensure_test_file(path, bytes, disk_seed);
+        std::cout << std::format("{}: {} bytes ({} written now)\n", path, bytes, written);
+        std::exit(0);
+    });
+    auto* disk_clean = disk->add_subcommand("clean", "Delete the test file");
+    add_disk_opts(disk_clean);
+    disk_clean->callback([&] {
+        const std::string path = disk_path.empty() ? bench::default_disk_path() : disk_path;
+        std::cout << (bench::remove_test_file(path)
+                          ? std::format("removed {}\n", path)
+                          : std::format("nothing to remove at {}\n", path));
+        std::exit(0);
     });
 
     // ---- validate ------------------------------------------------------------------

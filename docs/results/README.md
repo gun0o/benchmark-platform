@@ -132,6 +132,38 @@ A preliminary variance note, *not* a Target #2 measurement: at 1 MiB over 200 tr
 `--cold clflush` gives CoV 33.97 % against warm's 8.59 %. Cold mode made repeatability
 worse, which is the opposite of M3.3's stated hypothesis. Recorded for M3.3.
 
+## Disk I/O — M4.1, 2026-09-21
+
+Source: `m4.1/`. 4 GiB test file on ext4 — which is a **VHDX on the Windows host**, so these
+are *virtual disk* numbers. Medians; reads 5 trials of 500 ms, sequential writes 3 trials of
+300 ms. 1 MB = 1e6 bytes. Same power state as above.
+
+| metric | 1 thread | 4 threads | 16 threads |
+|---|---:|---:|---:|
+| `disk_seq_read_bw` | 2690 MB/s | **6405 MB/s** | — |
+| `disk_seq_write_bw` | 1487 MB/s | 1951 MB/s | — |
+| `disk_rand_read_iops` | 9131 | 32808 | **89966** |
+| `disk_rand_read_p99_us` | 274 µs | 234 µs | 300 µs |
+| `disk_rand_write_iops` | 512 | 554 | 585 |
+
+**Random writes barely scale** — 512 → 585 IOPS for sixteen times the threads — because
+`O_DSYNC` makes every write durable before it returns and device flushes serialize. A
+durable 4 KiB write costs about 2 ms here, **18× a 4 KiB read**. That is the number a
+database's commit path lives on, and it is meant to look like this.
+
+**The engine agrees with fio within ±5 %** — but only when the comparison is run
+*alternating*. Run the obvious way (engine, then fio) the engine looked 12–18 % faster; run
+alternating three times, every ratio is 0.958–1.030. The gap was drift in the host's cache
+over the VHDX, which is M2.5's lesson in a new domain. fio 3.36 was built from source (not
+packaged, no root).
+
+**`O_DIRECT` is verified, not assumed.** `strace` confirms the flags, the 1 MiB / 4 KiB
+transfer sizes, the 4096-aligned offsets and the 16:1 write-to-`fdatasync` ratio. Filling
+the guest's page cache with the whole 4 GiB file changes the next run by **−0.1 %**, and the
+first trial of a run is *slower* than the rest, not faster. What this cannot show is whether
+Windows caches the VHDX; nothing run inside the guest can, which is why the label is
+"virtual disk".
+
 ## Index
 
 | directory | milestone | what it holds |
@@ -144,6 +176,7 @@ worse, which is the opposite of M3.3's stated hypothesis. Recorded for M3.3.
 | `m2.5/` | M2.5 | the variance study: Target #2, the knob A/B, interleaving, the clock canary |
 | `m3.1/` | M3.1 | memory bandwidth: the working-set sweep, the thread knee, write-allocate, `--nt` |
 | `m3.2/` | M3.2 | cache latency: the pointer chase, the L1/L2 steps, huge pages, cold-vs-warm |
+| `m4.1/` | M4.1 | disk I/O: O_DIRECT, the fio comparison, the cold check, `O_DSYNC` writes |
 
 ## Targets
 

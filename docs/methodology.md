@@ -6,7 +6,7 @@ file records the measurement procedure behind it, the caveats that come with it,
 places where a number is easy to misread.
 
 It gains a section as each milestone lands. Sections present so far: **memory bandwidth**
-(M3.1), **cache latency** (M3.2). The milestone notes in `docs/notes/` carry the full
+(M3.1), **cache latency** (M3.2), **disk I/O** (M4.1). The milestone notes in `docs/notes/` carry the full
 derivation and the measurements behind each claim; this file is the short version a reader
 needs before quoting a number.
 
@@ -261,3 +261,118 @@ the Windows host and which can jump in either direction. One run during M3.2 rep
 5 minute 47 second span for 1.7 seconds of work, and the next run's timestamps were earlier
 than that "finish". Every measurement uses `steady_clock`; `duration_ns` per trial is the
 figure to trust. Do not compute a throughput from `finished_at − started_at`.
+
+---
+
+## Disk I/O — `disk_seq_*`, `disk_rand_*` (M4.1)
+
+Full derivation and the measurements behind every claim: `docs/notes/M4.1.md`. Raw runs:
+`docs/results/m4.1/`.
+
+### These are "virtual disk" numbers
+
+The filesystem under the test file is ext4 on `/dev/sde`, which is a **VHDX file on the
+Windows host**, not a physical device. `O_DIRECT` bypasses the **guest's** page cache — and
+that is measured, not assumed (see the cold check below) — but it says nothing about whether
+Windows is caching the VHDX. The guest cannot see, drop or measure the host's cache;
+`drop_caches` needs root and would affect only the guest anyway.
+
+So every figure here is what a program running in this WSL2 guest sees. That is a useful
+thing to know. It is not the device's number, and it is labelled accordingly everywhere.
+
+### Procedure
+
+A pre-created test file (`--disk-path`, default `$HOME/.cache/bench/testfile`, default size
+4 GiB) is **filled with random data** through 1 MiB `O_DIRECT` writes plus `fdatasync`, never
+left sparse and never zeroed: a sparse file's reads never reach the device, and
+thin-provisioned, compressing or deduplicating layers short-circuit runs of zeros. Buffers
+come from `posix_memalign(4096)`, which satisfies `O_DIRECT`'s alignment rule for both the
+512-byte logical and the 4096-byte physical sector size of this device.
+
+Before every trial, outside the timed region, the engine issues
+`posix_fadvise(POSIX_FADV_DONTNEED)` over the whole file — belt and braces alongside
+`O_DIRECT`, since something else may have read the file through the page cache.
+
+- **`disk_seq_read_bw` / `disk_seq_write_bw`**: 1 MiB `pread`/`pwrite`. Each thread owns a
+  contiguous block-aligned region of the file and wraps inside it, so N threads are N
+  sequential streams rather than N threads interleaving into one. A batch is 16 blocks; for
+  writes, `fdatasync` is called at the end of every batch, **inside the timed region**, so
+  the reported throughput includes durability. (PLAN.md says "at trial end"; a workload
+  cannot see a trial boundary, and per batch is stricter.)
+- **`disk_rand_read_iops` / `disk_rand_write_iops`**: 4 KiB `pread`/`pwrite` at uniformly
+  random 4 KiB-aligned offsets over the whole file, `std::mt19937_64` seeded per thread.
+  Queue depth is the thread count: one outstanding synchronous I/O per thread. Random writes
+  add `O_DSYNC`, because the metric is defined as **durable** 4 KiB writes.
+- **`disk_rand_read_p99_us`**: every read is timed with `steady_clock` into a 1 µs-bucket
+  histogram; the runner merges the threads' histograms after the trial's end barrier and
+  takes the 99th percentile. It is emitted from the **same trial** that produced
+  `disk_rand_read_iops`, not from a separate run, so the two describe the same reads.
+
+`--trial-ms` defaults to **500** when any selected metric is a disk metric (50 otherwise),
+because a 4 KiB read is ~110 µs and a 50 ms trial would hold too few samples for a p99.
+
+### The p99 is nearest-rank, unlike every other percentile in this project
+
+`stats.hpp` pins percentiles to numpy's `linear` interpolation and trial-level summaries
+still use it. The p99 does not: interpolating between two adjacent 1 µs buckets would invent
+precision the histogram does not have, since the samples were rounded to a microsecond on the
+way in. It is the smallest bucket whose cumulative count reaches `ceil(0.99 n)`, reported at
+that bucket's **upper edge**, so it answers "99 % of reads completed within X µs". Quantized
+by at most 1 µs, which is under 0.4 % of the 274 µs measured here.
+
+### Write metrics are gated, twice
+
+`--allow-writes` is required for `disk_seq_write_bw` and `disk_rand_write_iops` at all, and
+`--write-budget` (default 1 GiB) stops the run at a trial boundary once that many bytes have
+been written — the same mechanism as `--max-seconds`, so every trial that ran is a whole
+trial. A run that raises the budget records the raised value in its `argv`.
+
+### Measured on this machine
+
+| metric | 1 thread | 4 threads | 16 threads |
+|---|---:|---:|---:|
+| `disk_seq_read_bw` | 2690 MB/s | 6405 MB/s | — |
+| `disk_seq_write_bw` | 1487 MB/s | 1951 MB/s | — |
+| `disk_rand_read_iops` | 9131 | 32808 | 89966 |
+| `disk_rand_read_p99_us` | 274 µs | 234 µs | 300 µs |
+| `disk_rand_write_iops` | 512 | 554 | 585 |
+
+1 MB = 1e6 bytes. Two things are easy to misread:
+
+- **Random writes barely scale**: 512 → 585 IOPS for sixteen times the threads. `O_DSYNC`
+  makes each write durable before it returns, and device-level flushes serialize however many
+  threads ask for one. A durable 4 KiB write costs about 2 ms here, **18×** a 4 KiB read.
+  This is the number a database's commit path lives on, and it is meant to look like this.
+- **The p99 is far from the mean even on an idle device**: at QD 1, 274 µs against a 110 µs
+  mean. That gap is the reason the metric exists next to IOPS.
+
+### Agreement with fio, and how it has to be measured
+
+fio (`--direct=1 --ioengine=psync`, same block sizes, same job counts) is the reference.
+Run the obvious way — engine, then fio — the engine looked **12–18 % faster**. Run
+**alternating**, three repetitions, every ratio is within **±5 %**: 0.958–1.030 across
+sequential and random reads at every thread count.
+
+The gap was drift, not a tool difference, and the drifting variable is the host's cache over
+the VHDX. This is M2.5's lesson in a different domain: on a machine whose state changes, a
+single A-then-B comparison measures the order as much as the thing. For scale, fio's own
+QD 1 answer moves between 7763 and 8815 IOPS depending only on which of four reasonable
+parameter choices it is given.
+
+### The cold check, and what it does and does not prove
+
+Ten 300 ms trials with no warmup, then the whole 4 GiB file read into the guest page cache
+(`buff/cache` grew from 4251 MB to 8347 MB), then ten more:
+
+| | median | trial 0 / the rest |
+|---|---:|---:|
+| cold start | 2377 MB/s | 0.878 |
+| guest page cache deliberately filled | 2375 MB/s | 0.896 |
+
+**−0.1 %.** Four gigabytes in the guest's page cache are worth nothing to the next read, so
+`O_DIRECT` is doing what it claims. Trial 0 is *slower* than the trials after it in both runs
+— the opposite of a caching effect, and consistent with M1.2's first-trial cost.
+
+This does not rule out host-side caching, and nothing run from inside the guest can. The
+2.7 GB/s single-thread figure is within what a PCIe 4 NVMe does unaided, so it is not
+evidence either way.

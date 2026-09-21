@@ -267,6 +267,121 @@
         "huge_pages_requested": {
           "type": "boolean",
           "description": "MADV_HUGEPAGE was asked for. 'huge_pages' says whether the kernel granted any, measured from /proc/self/smaps."
+        },
+        "thp_policy": {
+          "type": "string",
+          "enum": [
+            "always",
+            "madvise",
+            "never",
+            "unknown"
+          ],
+          "description": "The kernel's transparent-huge-page policy from /sys/kernel/mm/transparent_hugepage/enabled. MADV_HUGEPAGE does nothing under 'never' and is redundant under 'always', so the same --no-hugepages comparison means three different things under the three."
+        },
+        "buffer_huge_page_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "AnonHugePages granted to the *workload's own* buffer, measured from /proc/self/smaps. Distinct from huge_page_bytes, which describes the cold-prep scratch buffer."
+        },
+        "buffer_huge_pages": {
+          "type": "boolean",
+          "description": "Whether buffer_huge_page_bytes is non-zero."
+        },
+        "chase_lines": {
+          "type": "integer",
+          "minimum": 2,
+          "description": "mem_latency: cache lines in the Sattolo cycle. The chase visits every one exactly once per lap."
+        },
+        "line_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "mem_latency: bytes per chase step, i.e. the cache-line size."
+        },
+        "batch_loads": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "mem_latency: dependent loads per batch."
+        },
+        "disk_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The test file the disk workloads read and wrote."
+        },
+        "file_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Size of the test file. Equals working_set_bytes for the disk workloads."
+        },
+        "o_direct": {
+          "type": "boolean",
+          "description": "The file was opened O_DIRECT, so transfers bypass the guest page cache. Inside a VM this says nothing about the host's caching of the backing image."
+        },
+        "o_dsync": {
+          "type": "boolean",
+          "description": "The file was opened O_DSYNC, so each write is durable before it returns. Set for disk_rand_write_iops."
+        },
+        "fadvise_dontneed": {
+          "type": "boolean",
+          "description": "posix_fadvise(POSIX_FADV_DONTNEED) was issued over the whole file before every trial, outside the timed region."
+        },
+        "blocks_per_batch": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "disk_seq: 1 MiB blocks per batch."
+        },
+        "ios_per_batch": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "disk_rand: I/O calls per batch."
+        },
+        "fdatasync_per_batch": {
+          "type": "boolean",
+          "description": "disk_seq write: fdatasync is called at the end of every batch, inside the timed region, so the reported throughput includes durability."
+        },
+        "region_offset": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "disk_seq: byte offset of this thread's contiguous region of the file."
+        },
+        "region_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "disk_seq: length of this thread's region. N threads are N sequential streams, not one interleaved."
+        },
+        "blocks_in_file": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "disk_rand: 4 KiB blocks the random offsets are drawn from."
+        },
+        "latency_bucket_us": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Width of one per-call latency histogram bucket, in microseconds."
+        },
+        "latency_bucket_count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Buckets in the per-call latency histogram, including the overflow bucket."
+        },
+        "latency_samples": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Per-call latencies recorded in this trial, summed across threads. The population disk_rand_read_p99_us is the 99th percentile of."
+        },
+        "latency_min_us": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Fastest individual I/O in this trial, as a bucket upper edge."
+        },
+        "latency_max_us": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Slowest individual I/O in this trial, as a bucket upper edge."
+        },
+        "latency_overflow": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "I/Os slower than the histogram's one-second bound. Those are stalls, not latencies, but they are counted rather than dropped."
         }
       }
     },

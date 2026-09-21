@@ -1,0 +1,76 @@
+=== environment ===
+2026-09-21T12:22:26-05:00
+Linux MatthewLaptop 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+--- root filesystem (the test file lives on it) ---
+Filesystem     Type  Size  Used Avail Use% Mounted on
+/dev/sde       ext4 1007G   18G  939G   2% /
+/dev/sde on / type ext4 (rw,relatime,discard,errors=remount-ro,data=ordered)
+--- device sector sizes ---
+NAME SIZE PHY-SEC LOG-SEC
+sde    1T    4096     512
+--- guest memory: MemAvailable vs the test file ---
+MemTotal:       16173228 kB
+MemAvailable:   13371624 kB
+test file size: 4G
+--- uptime / load ---
+ 12:22:26 up 10:53,  2 users,  load average: 1.85, 1.96, 1.51
+2026-09-21T12:22:26-05:00  before prep  power=Online battery=100% mode=Best performance
++ bench disk prep --size 4G
+/home/matthewlee/.cache/bench/testfile: 4294967296 bytes (4294967296 written now)
+2026-09-21T12:22:29-05:00  after prep  power=Online battery=100% mode=Best performance
+=== Verify 1: strace ===
+
+# one pread64 line each, showing the transfer size (1048576 seq, 4096 rand).
+pread64(3, "\6\0\0\0\4\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0"..., 784, 64) = 784
+pread64(3, "\4\0\0\0 \0\0\0\5\0\0\0GNU\0\2\0\0\300\4\0\0\0\3\0\0\0\0\0\0\0"..., 48, 848) = 48
+pread64(3, "\6\0\0\0\4\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0"..., 784, 64) = 784
+pread64(3, "\4\0\0\0 \0\0\0\5\0\0\0GNU\0\2\0\0\300\4\0\0\0\3\0\0\0\0\0\0\0"..., 48, 848) = 48
+2026-09-21T12:22:30-05:00  before reads  power=Online battery=100% mode=Best performance
++ disk_seq_read_bw at 1,4 threads
+machine: Intel(R) Core(TM) Ultra 9 185H  (Ubuntu 22.04.5 LTS)
+run 470fb2b0-567c-44a9-8e51-5416a61e1121  2026-09-21T17:22:30.355855Z -> 2026-09-21T17:22:37.779085Z
+METRIC        THR         WS       MEDIAN         MEAN     CoV% MAD/MED%      N          MIN          MAX   LATE%   ATT    CLK0    CLK1
+disk_seq_read_bw    1 4294967296         2690         2705     6.75     1.16      5         2483         2991     0.0     1    15.0    15.0
+disk_seq_read_bw    4 4294967296         6405         6385     4.65     4.22      5         6077         6811     0.0     1    16.6    15.0
++ disk_rand_read_iops (and its p99) at 1,4,16 threads
+machine: Intel(R) Core(TM) Ultra 9 185H  (Ubuntu 22.04.5 LTS)
+run 50ab6dbd-6642-4aaa-94d0-fcf5a9bc8f76  2026-09-21T17:22:37.784921Z -> 2026-09-21T17:22:48.740939Z
+METRIC        THR         WS       MEDIAN         MEAN     CoV% MAD/MED%      N          MIN          MAX   LATE%   ATT    CLK0    CLK1
+disk_rand_read_iops    1 4294967296         9131         9228     2.81     0.79      5         9059         9679     0.0     1    14.9    15.9
+disk_rand_read_p99_us    1 4294967296          274          271    11.21     6.93      5          231          312     0.0     1    14.9    15.9
+disk_rand_read_iops    4 4294967296    3.281e+04    3.304e+04     1.33     0.31      5    3.271e+04    3.377e+04     0.0     1    15.7    15.5
+disk_rand_read_p99_us    4 4294967296          234        235.4     5.97     5.13      5          220          253     0.0     1    15.7    15.5
+disk_rand_read_iops   16 4294967296    8.997e+04    8.993e+04     4.41     1.52      5    8.461e+04    9.558e+04     0.0     1    15.4    15.3
+disk_rand_read_p99_us   16 4294967296          300        293.2     7.99     5.67      5          258          318     0.0     1    15.4    15.3
+2026-09-21T12:22:48-05:00  after reads  power=Online battery=100% mode=Best performance
+2026-09-21T12:22:49-05:00  before writes  power=Online battery=100% mode=Best performance
++ disk_seq_write_bw at 1,4 threads (shorter trials: this is the wear)
+machine: Intel(R) Core(TM) Ultra 9 185H  (Ubuntu 22.04.5 LTS)
+run 5bc44abc-6c60-472b-a942-aeb349619d3a  2026-09-21T17:22:49.381391Z -> 2026-09-21T17:22:52.215640Z
+METRIC        THR         WS       MEDIAN         MEAN     CoV% MAD/MED%      N          MIN          MAX   LATE%   ATT    CLK0    CLK1
+disk_seq_write_bw    1 4294967296         1487         1502     1.90     0.12      3         1485         1535     0.0     1    17.1    15.2
+disk_seq_write_bw    4 4294967296         1951         1954     1.53     1.23      3         1927         1986     0.0     1    15.7    15.4
++ disk_rand_write_iops at 1,4,16 threads (O_DSYNC, slow, writes little)
+machine: Intel(R) Core(TM) Ultra 9 185H  (Ubuntu 22.04.5 LTS)
+run 44cf8886-7baf-451c-885c-583ac93e7185  2026-09-21T17:22:52.222066Z -> 2026-09-21T17:23:07.478794Z
+METRIC        THR         WS       MEDIAN         MEAN     CoV% MAD/MED%      N          MIN          MAX   LATE%   ATT    CLK0    CLK1
+disk_rand_write_iops    1 4294967296        511.8        500.6     8.15     4.90      5        437.1        540.7     0.0     1    16.1    15.3
+disk_rand_write_iops    4 4294967296        554.2        548.2     2.48     1.42      5          528          562     0.0     1    15.4    16.5
+disk_rand_write_iops   16 4294967296        584.9          583     3.47     2.65      5        557.9        609.6     0.0     1    15.1    14.5
+2026-09-21T12:23:07-05:00  after writes  power=Online battery=100% mode=Best performance
+=== Verify 3: cold check ===
+2026-09-21T12:23:07-05:00  before cold check  power=Online battery=100% mode=Best performance
++ filling the guest page cache with the whole file, then re-running
+--- free before cat ---
+               total        used        free      shared  buff/cache   available
+Mem:           15794        2336        9206           5        4251       13210
+Swap:           4096           0        4096
+--- free after cat (buff/cache should have grown by ~4 GiB) ---
+               total        used        free      shared  buff/cache   available
+Mem:           15794        2275        5170           5        8347       13271
+Swap:           4096           0        4096
+2026-09-21T12:23:16-05:00  after cold check  power=Online battery=100% mode=Best performance
+=== done ===
+               total        used        free      shared  buff/cache   available
+Mem:           15794        2277        9264           5        4252       13269
+Swap:           4096           0        4096

@@ -1,0 +1,36 @@
+=== 1. Is O_DIRECT actually set on the test file? ===
+[pid 319899] openat(AT_FDCWD, "/home/matthewlee/.cache/bench/testfile", O_RDONLY|O_DIRECT) = 3
+[pid 319905] openat(AT_FDCWD, "/home/matthewlee/.cache/bench/testfile", O_WRONLY|O_DSYNC|O_DIRECT) = 3
+
+=== 2. disk_seq_read_bw: transfer sizes (count, bytes) ===
+      1 48
+      1 68
+      2 784
+     32 1048576
+
+=== 3. disk_rand_read_iops: transfer sizes (count, bytes) ===
+      1 48
+      1 68
+      2 784
+     96 4096
+--- and offset mod 4096 (count, remainder): all must be 0 ---
+     96 0
+
+=== 4. disk_seq_write_bw: pwrite64 sizes, and one fdatasync per 16-block batch ===
+    128 1048576
+strace: Process 319961 attached
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 87.16    0.012821          89       144           pwrite64
+ 12.84    0.001889         209         9           fdatasync
+------ ----------- ----------- --------- --------- ----------------
+100.00    0.014710          96       153           total
+
+=== 5. call counts for a sequential read trial ===
+strace: Process 319967 attached
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 94.85    0.009174         109        84           pread64
+  5.15    0.000498          12        41           openat
+------ ----------- ----------- --------- --------- ----------------
+100.00    0.009672          77       125           total

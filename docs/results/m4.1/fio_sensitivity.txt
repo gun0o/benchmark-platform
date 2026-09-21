@@ -1,0 +1,14 @@
+=== fio parameter sensitivity ===
+--- randread t1, extra: none ---
+  iops=8380  p99=272 us
+--- randread t1, extra: --norandommap=1 ---
+  iops=7763  p99=309 us
+--- randread t1, extra: --norandommap=1 --random_generator=tausworthe ---
+  iops=8798  p99=247 us
+--- randread t1, extra: --thread ---
+  iops=8815  p99=243 us
+
+--- seqread t4, extra: none ---
+  MB/s=5372
+--- seqread t4, extra: --thread ---
+  MB/s=5442

@@ -1,0 +1,16 @@
+=== environment ===
+2026-09-21T12:22:26-05:00
+Linux MatthewLaptop 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+--- root filesystem (the test file lives on it) ---
+Filesystem     Type  Size  Used Avail Use% Mounted on
+/dev/sde       ext4 1007G   18G  939G   2% /
+/dev/sde on / type ext4 (rw,relatime,discard,errors=remount-ro,data=ordered)
+--- device sector sizes ---
+NAME SIZE PHY-SEC LOG-SEC
+sde    1T    4096     512
+--- guest memory: MemAvailable vs the test file ---
+MemTotal:       16173228 kB
+MemAvailable:   13371624 kB
+test file size: 4G
+--- uptime / load ---
+ 12:22:26 up 10:53,  2 users,  load average: 1.85, 1.96, 1.51

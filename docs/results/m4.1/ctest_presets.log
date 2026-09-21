@@ -1,0 +1,27 @@
+# M4.1 - all five presets, after the disk workloads.
+# 2026-09-21T12:36:56-05:00
+
+### ctest --preset release
+100% tests passed, 0 tests failed out of 168
+perf    =  14.07 sec*proc (16 tests)
+Total Test time (real) =  20.23 sec
+
+### ctest --preset debug
+100% tests passed, 0 tests failed out of 168
+perf    =  11.09 sec*proc (16 tests)
+Total Test time (real) =  17.94 sec
+
+### ctest --preset ci
+100% tests passed, 0 tests failed out of 168
+perf    =  14.12 sec*proc (16 tests)
+Total Test time (real) =  20.23 sec
+
+### ctest --preset asan
+100% tests passed, 0 tests failed out of 168
+perf    =   7.77 sec*proc (16 tests)
+Total Test time (real) =  20.35 sec
+
+### ctest --preset tsan
+100% tests passed, 0 tests failed out of 168
+perf    =   9.35 sec*proc (16 tests)
+Total Test time (real) =  19.14 sec

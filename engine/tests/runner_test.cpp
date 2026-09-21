@@ -123,10 +123,15 @@ TEST(Runner, RejectsBadConfig) {
     EXPECT_THROW(run_benchmarks(quick(1, 0, 0), MachineInfo{}, {"bench"}), std::invalid_argument);
 }
 
-TEST(Runner, UnimplementedWorkloadThrows) {
-    RunConfig c = quick(1, 0, 5);
-    c.workloads = {Workload::disk_seq};
-    EXPECT_THROW(run_benchmarks(c, MachineInfo{}, {"bench"}), std::runtime_error);
+TEST(Runner, EveryRegisteredWorkloadCanActuallyBeRun) {
+    // The registry's `implemented` flag is what `--all` trusts and what `bench list` prints.
+    // Every workload is built as of M4.1, so the old "unimplemented throws" test has nothing
+    // left to point at; what still needs guarding is that the flag never gets ahead of the
+    // code. run_benchmarks throws for a workload it has no session for.
+    for (const auto& d : workload_registry()) {
+        EXPECT_TRUE(d.implemented) << to_string(d.kind);
+        EXPECT_FALSE(metrics_of(d.kind).empty()) << to_string(d.kind);
+    }
 }
 
 // ---- M2.1: worker pool -----------------------------------------------------------------
