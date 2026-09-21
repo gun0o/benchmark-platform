@@ -1,0 +1,6 @@
+M2.5 verify: schema validation of every run file written by this milestone
+2026-09-21T01:04:01-05:00
+
+bench validate: 38 files, 0 failures
+
+check-jsonschema: all 38 files valid against the schema (incl. the 4 new summary fields)

@@ -145,9 +145,21 @@ void check_summary(const json& s, std::size_t i, Problems& out) {
     }
     if (s.contains("n") && is_int(s["n"]) && s["n"].get<long long>() < 1)
         out.push_back(w + ".n: must be >= 1");
-    for (const char* k : {"stddev", "cov", "mad"})
+    for (const char* k : {"stddev", "cov", "mad", "clock_call_ns_start", "clock_call_ns_end"})
         if (s.contains(k) && s[k].is_number() && s[k].get<double>() < 0)
             out.push_back(std::format("{}.{}: must be >= 0", w, k));
+    // M2.5 run-quality fields. late_trials counts a subset of the timed trials, so a value
+    // above n means the two were computed from different things.
+    if (s.contains("late_trials") && is_int(s["late_trials"])) {
+        const auto late = s["late_trials"].get<long long>();
+        if (late < 0)
+            out.push_back(w + ".late_trials: must be >= 0");
+        else if (s.contains("n") && is_int(s["n"]) && late > s["n"].get<long long>())
+            out.push_back(w + ".late_trials: must be <= n");
+    }
+    if (s.contains("canary_attempts") && is_int(s["canary_attempts"]) &&
+        s["canary_attempts"].get<long long>() < 1)
+        out.push_back(w + ".canary_attempts: must be >= 1");
     // Ordering invariants that any correct summary satisfies.
     auto num = [&](const char* k) {
         return s.contains(k) && s[k].is_number() ? s[k].get<double>() : 0.0;

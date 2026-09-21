@@ -94,3 +94,4 @@ benchmark-testfile*
 .DS_Store
 Thumbs.db
 .claude/settings.local.json
+__pycache__/

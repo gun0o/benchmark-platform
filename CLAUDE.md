@@ -132,6 +132,8 @@ cmake --preset asan && cmake --build --preset asan && ctest --preset asan   # sa
 ./build/release/bench run --workload cpu_int --trials 12 --warmup 0 --spin-ms 0 --verbose   # see the warmup effect
 ./build/release/bench run --workload cpu_int --threads 8 --pin --verbose                    # per-trial start spread + CPU ids
 ./build/release/bench run --workload cpu_int --trials 1000 --max-seconds 120                # safety cap; stops at a trial boundary
+./build/release/bench run --workload cpu_int,cpu_fp --trials 1000 --interleave              # rotate configs trial-by-trial (variance study)
+./build/release/bench report run.json                                                       # per-config summary table; --wide adds run-quality columns
 ctest --preset release -LE perf              # skip the timing-ratio tests (false sharing, barrier spread)
 ./build/release/bench run --workload mem_latency --working-set 16K,64K,1M,8M,64M,512M --cold clflush
 ./build/release/bench run --all --trials 1000 --trial-ms 50 --pin --cold clflush --post http://localhost:8080

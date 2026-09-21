@@ -64,11 +64,38 @@ struct ClockCheck {
     std::uint64_t resolution_ns = 0;
     double mean_call_ns = 0; // mean delta between consecutive now() calls
     std::uint64_t max_call_ns = 0;
+    // The cheapest delta seen. Between preemptions a now() call costs what it costs, so
+    // this is the build's true clock cost even on a busy host - which is what makes
+    // mean/min a contention signal that does not care whether the build is instrumented.
+    std::uint64_t min_call_ns = 0;
+    std::uint64_t samples = 0;    // how many deltas were actually taken
+    std::uint64_t elapsed_ns = 0; // how long the sampling window really was
     bool monotonic = true;
     bool ok = false; // monotonic && mean_call_ns <= kMaxMeanCallNs
     static constexpr double kMaxMeanCallNs = 100.0;
+
+    // Mean cost divided by the cheapest call seen: ~1 whenever every call cost about the
+    // same, however expensive that is, and large when a few calls took vastly longer than
+    // the rest - which is what being descheduled mid-measurement looks like.
+    [[nodiscard]] double contention_ratio() const noexcept {
+        return min_call_ns == 0 ? 1.0 : mean_call_ns / static_cast<double>(min_call_ns);
+    }
 };
-ClockCheck clock_selftest(int samples = 100'000) noexcept;
+
+// Sample back-to-back now() deltas, stopping at `samples` or `max_window`, whichever comes
+// first. Used two ways, and the second is why the time cap exists:
+//
+//   as a self-test  - is this clocksource sane? A sample count is the natural budget.
+//   as a canary     - was the host contended? What matters is how long we watched for,
+//                     because contention this misses is contention it cannot report.
+//
+// A pure sample count makes the window depend on how expensive a call happens to be, which
+// varies by an order of magnitude between a release build and a sanitizer build, and grows
+// further under the very contention the canary is looking for. A time cap pins the window
+// instead, and keeps the canary from eating a caller's --max-seconds budget.
+ClockCheck clock_selftest(int samples = 100'000,
+                          std::chrono::microseconds max_window = std::chrono::microseconds{
+                              0}) noexcept;
 
 // Busy-spin (not sleep) for `ms` so the core ramps to its running frequency.
 void busy_spin(std::chrono::milliseconds ms) noexcept;

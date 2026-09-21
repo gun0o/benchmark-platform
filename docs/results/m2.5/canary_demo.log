@@ -1,0 +1,8 @@
+load                    clk_start    clk_end   attempts   verdict
+0 spinners / 22 vCPUs       15.8n      15.9n          1      kept
+22 spinners / 22 vCPUs      37.2n      44.3n          2    RE-RUN
+66 spinners / 22 vCPUs      57.4n      84.9n          3    RE-RUN
+220 spinners / 22 vCPUs     294.0n     320.3n          3    RE-RUN
+
+The rule is pre-declared: it reads only the clock, never a trial value, and it keeps
+or discards a whole configuration. It is not outlier trimming.

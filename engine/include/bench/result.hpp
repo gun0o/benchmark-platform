@@ -57,6 +57,12 @@ struct Summary {
     // stddev is the SAMPLE standard deviation (n-1); p5/p95/median use numpy's "linear"
     // percentile interpolation; cov = stddev / mean; mad = median(|x - median(x)|).
     double mean = 0, median = 0, stddev = 0, cov = 0, min = 0, p5 = 0, p95 = 0, max = 0, mad = 0;
+    // M2.5 run-quality fields. They describe the conditions the trials were taken under,
+    // not the trials themselves, and nothing here is ever used to drop a value.
+    int late_trials = 0;            // timed trials whose worker start spread exceeded 1000 us
+    int canary_attempts = 1;        // >1: an earlier attempt was discarded, host was contended
+    double clock_call_ns_start = 0; // clock self-test before this configuration's trials
+    double clock_call_ns_end = 0;   // ...and after
 
     bool operator==(const Summary&) const = default;
 };

@@ -3,7 +3,7 @@
 from anywhere else; this script is committed so the table can be regenerated."""
 import json, sys
 
-FREQ_GHZ = 4.28  # measured, 1 thread, docs/results/m2.4/frequency_probe.log
+FREQ_GHZ = 4.83  # measured, 1 thread, Best performance, docs/results/m2.4/frequency_probe.log
 
 def load(path):
     d = json.load(open(path))

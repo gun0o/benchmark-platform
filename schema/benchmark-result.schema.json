@@ -4,49 +4,80 @@
   "title": "Benchmark run",
   "description": "A run envelope emitted by `bench run` and accepted by POST /v1/runs. One result = one trial of one metric for one (machine, workload, thread_count, working_set_bytes) configuration. $defs/result describes a standalone result with its machine block inlined; inside a run, results omit `machine` because it is hoisted to the envelope.",
   "$ref": "#/$defs/run",
-
   "$defs": {
-    "schema_version": { "type": "integer", "const": 1 },
-
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
     "uuid": {
       "type": "string",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     },
-
     "timestamp": {
       "type": "string",
       "format": "date-time",
       "description": "RFC 3339 in UTC with a Z suffix, microsecond precision.",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?Z$"
     },
-
     "workload": {
       "type": "string",
-      "enum": ["cpu_int", "cpu_fp", "cpu_hash", "mem_bw", "mem_latency", "disk_seq", "disk_rand"]
+      "enum": [
+        "cpu_int",
+        "cpu_fp",
+        "cpu_hash",
+        "mem_bw",
+        "mem_latency",
+        "disk_seq",
+        "disk_rand"
+      ]
     },
-
     "metric": {
       "type": "string",
       "enum": [
-        "cpu_int_ops", "cpu_fp_ops", "cpu_hash_ops",
-        "mem_read_bw", "mem_write_bw", "mem_copy_bw", "mem_latency",
-        "disk_seq_read_bw", "disk_seq_write_bw",
-        "disk_rand_read_iops", "disk_rand_write_iops", "disk_rand_read_p99_us"
+        "cpu_int_ops",
+        "cpu_fp_ops",
+        "cpu_hash_ops",
+        "mem_read_bw",
+        "mem_write_bw",
+        "mem_copy_bw",
+        "mem_latency",
+        "disk_seq_read_bw",
+        "disk_seq_write_bw",
+        "disk_rand_read_iops",
+        "disk_rand_write_iops",
+        "disk_rand_read_p99_us"
       ]
     },
-
     "unit": {
       "type": "string",
-      "enum": ["ops/s", "GB/s", "ns", "MB/s", "IOPS", "us"]
+      "enum": [
+        "ops/s",
+        "GB/s",
+        "ns",
+        "MB/s",
+        "IOPS",
+        "us"
+      ]
     },
-
     "machine": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "id", "hostname", "cpu_model", "physical_cores", "logical_cpus",
-        "l1d_kb", "l2_kb", "l3_kb", "memory_bytes", "os", "kernel",
-        "compiler", "compiler_flags", "engine_version", "engine_git_sha"
+        "id",
+        "hostname",
+        "cpu_model",
+        "physical_cores",
+        "logical_cpus",
+        "l1d_kb",
+        "l2_kb",
+        "l3_kb",
+        "memory_bytes",
+        "os",
+        "kernel",
+        "compiler",
+        "compiler_flags",
+        "engine_version",
+        "engine_git_sha"
       ],
       "properties": {
         "id": {
@@ -54,115 +85,495 @@
           "pattern": "^[0-9a-f]{32}$",
           "description": "First 16 bytes (32 hex chars) of SHA-256 over cpu_model|physical_cores|logical_cpus|l3_kb|memory_bytes|hostname."
         },
-        "hostname": { "type": "string", "minLength": 1 },
-        "cpu_model": { "type": "string", "minLength": 1 },
-        "physical_cores": { "type": "integer", "minimum": 1 },
-        "logical_cpus": { "type": "integer", "minimum": 1 },
-        "l1d_kb": { "type": "integer", "minimum": 0, "description": "Per-core L1d in KiB, 0 if unknown." },
-        "l2_kb": { "type": "integer", "minimum": 0, "description": "Per-core L2 in KiB, 0 if unknown." },
-        "l3_kb": { "type": "integer", "minimum": 0, "description": "Total L3 in KiB, 0 if unknown." },
-        "memory_bytes": { "type": "integer", "minimum": 0 },
-        "os": { "type": "string", "minLength": 1 },
-        "kernel": { "type": "string", "minLength": 1 },
-        "compiler": { "type": "string", "minLength": 1 },
-        "compiler_flags": { "type": "string" },
-        "engine_version": { "type": "string", "minLength": 1 },
-        "engine_git_sha": { "type": "string", "minLength": 1 },
-        "virtualized": { "type": "string", "description": "Optional: e.g. \"wsl2\", \"docker\", \"none\"." }
+        "hostname": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cpu_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "physical_cores": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "logical_cpus": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "l1d_kb": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Per-core L1d in KiB, 0 if unknown."
+        },
+        "l2_kb": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Per-core L2 in KiB, 0 if unknown."
+        },
+        "l3_kb": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total L3 in KiB, 0 if unknown."
+        },
+        "memory_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "os": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kernel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "compiler": {
+          "type": "string",
+          "minLength": 1
+        },
+        "compiler_flags": {
+          "type": "string"
+        },
+        "engine_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "engine_git_sha": {
+          "type": "string",
+          "minLength": 1
+        },
+        "virtualized": {
+          "type": "string",
+          "description": "Optional: e.g. \"wsl2\", \"docker\", \"none\"."
+        }
       }
     },
-
     "params": {
       "type": "object",
       "description": "Everything needed to reproduce the trial. Keys are stable but open-ended.",
       "properties": {
-        "cold": { "type": "string", "enum": ["clflush", "evict", "none", "n/a"],
-                  "description": "What cold preparation actually happened. \"n/a\" means it was requested but could not apply, e.g. a region larger than the LLC." },
-        "cold_requested": { "type": "string", "enum": ["clflush", "evict", "none"],
-                            "description": "What --cold asked for; differs from \"cold\" when the machine could not do it." },
-        "cold_bytes": { "type": "integer", "minimum": 0,
-                        "description": "Region flushed (clflush) or scratch buffer streamed (evict), per thread." },
-        "cold_prep_mean_us": { "type": "number", "minimum": 0 },
-        "cold_prep_max_us": { "type": "number", "minimum": 0 },
-        "pinned": { "type": "boolean" },
-        "cpus": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
-        "warmup_trials": { "type": "integer", "minimum": 0 },
-        "trial_ms": { "type": "integer", "minimum": 1 },
-        "seed": { "type": "integer" },
-        "huge_pages": { "type": "boolean" },
-        "huge_page_bytes": { "type": "integer", "minimum": 0,
-                             "description": "AnonHugePages actually granted, from /proc/self/smaps. Never assumed." },
-        "block_bytes": { "type": "integer", "minimum": 1 },
-        "queue_depth": { "type": "integer", "minimum": 1 }
+        "cold": {
+          "type": "string",
+          "enum": [
+            "clflush",
+            "evict",
+            "none",
+            "n/a"
+          ],
+          "description": "What cold preparation actually happened. \"n/a\" means it was requested but could not apply, e.g. a region larger than the LLC."
+        },
+        "cold_requested": {
+          "type": "string",
+          "enum": [
+            "clflush",
+            "evict",
+            "none"
+          ],
+          "description": "What --cold asked for; differs from \"cold\" when the machine could not do it."
+        },
+        "cold_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Region flushed (clflush) or scratch buffer streamed (evict), per thread."
+        },
+        "cold_prep_mean_us": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cold_prep_max_us": {
+          "type": "number",
+          "minimum": 0
+        },
+        "pinned": {
+          "type": "boolean"
+        },
+        "cpus": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "warmup_trials": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "trial_ms": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "huge_pages": {
+          "type": "boolean"
+        },
+        "huge_page_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "AnonHugePages actually granted, from /proc/self/smaps. Never assumed."
+        },
+        "block_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "queue_depth": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
-
     "result_core": {
       "type": "object",
       "required": [
-        "workload", "thread_count", "working_set_bytes", "metric",
-        "value", "unit", "trial", "timestamp", "duration_ns"
+        "workload",
+        "thread_count",
+        "working_set_bytes",
+        "metric",
+        "value",
+        "unit",
+        "trial",
+        "timestamp",
+        "duration_ns"
       ],
       "properties": {
-        "workload": { "$ref": "#/$defs/workload" },
-        "thread_count": { "type": "integer", "minimum": 1 },
-        "working_set_bytes": { "type": "integer", "minimum": 0 },
-        "metric": { "$ref": "#/$defs/metric" },
-        "value": { "type": "number" },
-        "unit": { "$ref": "#/$defs/unit" },
-        "trial": { "type": "integer", "minimum": 0, "description": "0-based, post-warmup." },
-        "timestamp": { "$ref": "#/$defs/timestamp" },
-        "duration_ns": { "type": "integer", "minimum": 1 },
-        "params": { "$ref": "#/$defs/params" }
+        "workload": {
+          "$ref": "#/$defs/workload"
+        },
+        "thread_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "working_set_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "metric": {
+          "$ref": "#/$defs/metric"
+        },
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "$ref": "#/$defs/unit"
+        },
+        "trial": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "0-based, post-warmup."
+        },
+        "timestamp": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "duration_ns": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "params": {
+          "$ref": "#/$defs/params"
+        }
       },
       "allOf": [
-        { "if": { "properties": { "metric": { "const": "cpu_int_ops" } }, "required": ["metric"] },
-          "then": { "properties": { "unit": { "const": "ops/s" }, "workload": { "const": "cpu_int" } } } },
-        { "if": { "properties": { "metric": { "const": "cpu_fp_ops" } }, "required": ["metric"] },
-          "then": { "properties": { "unit": { "const": "ops/s" }, "workload": { "const": "cpu_fp" } } } },
-        { "if": { "properties": { "metric": { "const": "cpu_hash_ops" } }, "required": ["metric"] },
-          "then": { "properties": { "unit": { "const": "ops/s" }, "workload": { "const": "cpu_hash" } } } },
-        { "if": { "properties": { "metric": { "const": "mem_read_bw" } }, "required": ["metric"] },
-          "then": { "properties": { "unit": { "const": "GB/s" }, "workload": { "const": "mem_bw" } } } },
-        { "if": { "properties": { "metric": { "const": "mem_write_bw" } }, "required": ["metric"] },
-          "then": { "properties": { "unit": { "const": "GB/s" }, "workload": { "const": "mem_bw" } } } },
-        { "if": { "properties": { "metric": { "const": "mem_copy_bw" } }, "required": ["metric"] },
-          "then": { "properties": { "unit": { "const": "GB/s" }, "workload": { "const": "mem_bw" } } } },
-        { "if": { "properties": { "metric": { "const": "mem_latency" } }, "required": ["metric"] },
-          "then": { "properties": { "unit": { "const": "ns" }, "workload": { "const": "mem_latency" } } } },
-        { "if": { "properties": { "metric": { "const": "disk_seq_read_bw" } }, "required": ["metric"] },
-          "then": { "properties": { "unit": { "const": "MB/s" }, "workload": { "const": "disk_seq" } } } },
-        { "if": { "properties": { "metric": { "const": "disk_seq_write_bw" } }, "required": ["metric"] },
-          "then": { "properties": { "unit": { "const": "MB/s" }, "workload": { "const": "disk_seq" } } } },
-        { "if": { "properties": { "metric": { "const": "disk_rand_read_iops" } }, "required": ["metric"] },
-          "then": { "properties": { "unit": { "const": "IOPS" }, "workload": { "const": "disk_rand" } } } },
-        { "if": { "properties": { "metric": { "const": "disk_rand_write_iops" } }, "required": ["metric"] },
-          "then": { "properties": { "unit": { "const": "IOPS" }, "workload": { "const": "disk_rand" } } } },
-        { "if": { "properties": { "metric": { "const": "disk_rand_read_p99_us" } }, "required": ["metric"] },
-          "then": { "properties": { "unit": { "const": "us" }, "workload": { "const": "disk_rand" } } } }
-      ]
-    },
-
-    "result": {
-      "description": "A standalone result with its machine block inlined (the API's canonical row shape).",
-      "allOf": [
-        { "$ref": "#/$defs/result_core" },
         {
-          "type": "object",
-          "required": ["schema_version", "run_id", "machine"],
-          "properties": {
-            "schema_version": { "$ref": "#/$defs/schema_version" },
-            "run_id": { "$ref": "#/$defs/uuid" },
-            "machine": { "$ref": "#/$defs/machine" }
+          "if": {
+            "properties": {
+              "metric": {
+                "const": "cpu_int_ops"
+              }
+            },
+            "required": [
+              "metric"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "ops/s"
+              },
+              "workload": {
+                "const": "cpu_int"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric": {
+                "const": "cpu_fp_ops"
+              }
+            },
+            "required": [
+              "metric"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "ops/s"
+              },
+              "workload": {
+                "const": "cpu_fp"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric": {
+                "const": "cpu_hash_ops"
+              }
+            },
+            "required": [
+              "metric"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "ops/s"
+              },
+              "workload": {
+                "const": "cpu_hash"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric": {
+                "const": "mem_read_bw"
+              }
+            },
+            "required": [
+              "metric"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "GB/s"
+              },
+              "workload": {
+                "const": "mem_bw"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric": {
+                "const": "mem_write_bw"
+              }
+            },
+            "required": [
+              "metric"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "GB/s"
+              },
+              "workload": {
+                "const": "mem_bw"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric": {
+                "const": "mem_copy_bw"
+              }
+            },
+            "required": [
+              "metric"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "GB/s"
+              },
+              "workload": {
+                "const": "mem_bw"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric": {
+                "const": "mem_latency"
+              }
+            },
+            "required": [
+              "metric"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "ns"
+              },
+              "workload": {
+                "const": "mem_latency"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric": {
+                "const": "disk_seq_read_bw"
+              }
+            },
+            "required": [
+              "metric"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "MB/s"
+              },
+              "workload": {
+                "const": "disk_seq"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric": {
+                "const": "disk_seq_write_bw"
+              }
+            },
+            "required": [
+              "metric"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "MB/s"
+              },
+              "workload": {
+                "const": "disk_seq"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric": {
+                "const": "disk_rand_read_iops"
+              }
+            },
+            "required": [
+              "metric"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "IOPS"
+              },
+              "workload": {
+                "const": "disk_rand"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric": {
+                "const": "disk_rand_write_iops"
+              }
+            },
+            "required": [
+              "metric"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "IOPS"
+              },
+              "workload": {
+                "const": "disk_rand"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric": {
+                "const": "disk_rand_read_p99_us"
+              }
+            },
+            "required": [
+              "metric"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "us"
+              },
+              "workload": {
+                "const": "disk_rand"
+              }
+            }
           }
         }
       ]
     },
-
+    "result": {
+      "description": "A standalone result with its machine block inlined (the API's canonical row shape).",
+      "allOf": [
+        {
+          "$ref": "#/$defs/result_core"
+        },
+        {
+          "type": "object",
+          "required": [
+            "schema_version",
+            "run_id",
+            "machine"
+          ],
+          "properties": {
+            "schema_version": {
+              "$ref": "#/$defs/schema_version"
+            },
+            "run_id": {
+              "$ref": "#/$defs/uuid"
+            },
+            "machine": {
+              "$ref": "#/$defs/machine"
+            }
+          }
+        }
+      ]
+    },
     "run_result": {
       "description": "A result inside a run envelope: no schema_version, run_id or machine (hoisted).",
       "allOf": [
-        { "$ref": "#/$defs/result_core" },
+        {
+          "$ref": "#/$defs/result_core"
+        },
         {
           "type": "object",
           "properties": {
@@ -173,42 +584,145 @@
         }
       ]
     },
-
     "summary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["workload", "metric", "thread_count", "working_set_bytes", "n", "mean", "median", "stddev", "cov", "min", "p5", "p95", "max"],
+      "required": [
+        "workload",
+        "metric",
+        "thread_count",
+        "working_set_bytes",
+        "n",
+        "mean",
+        "median",
+        "stddev",
+        "cov",
+        "min",
+        "p5",
+        "p95",
+        "max"
+      ],
       "properties": {
-        "workload": { "$ref": "#/$defs/workload" },
-        "metric": { "$ref": "#/$defs/metric" },
-        "thread_count": { "type": "integer", "minimum": 1 },
-        "working_set_bytes": { "type": "integer", "minimum": 0 },
-        "n": { "type": "integer", "minimum": 1 },
-        "mean": { "type": "number" },
-        "median": { "type": "number" },
-        "stddev": { "type": "number", "minimum": 0, "description": "Sample standard deviation (n-1)." },
-        "cov": { "type": "number", "minimum": 0, "description": "stddev / mean." },
-        "min": { "type": "number" },
-        "p5": { "type": "number", "description": "numpy 'linear' percentile." },
-        "p95": { "type": "number" },
-        "max": { "type": "number" },
-        "mad": { "type": "number", "minimum": 0, "description": "Median absolute deviation: median(|x - median(x)|). Optional robust companion to stddev/cov." }
+        "workload": {
+          "$ref": "#/$defs/workload"
+        },
+        "metric": {
+          "$ref": "#/$defs/metric"
+        },
+        "thread_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "working_set_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "n": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "mean": {
+          "type": "number"
+        },
+        "median": {
+          "type": "number"
+        },
+        "stddev": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Sample standard deviation (n-1)."
+        },
+        "cov": {
+          "type": "number",
+          "minimum": 0,
+          "description": "stddev / mean."
+        },
+        "min": {
+          "type": "number"
+        },
+        "p5": {
+          "type": "number",
+          "description": "numpy 'linear' percentile."
+        },
+        "p95": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "mad": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Median absolute deviation: median(|x - median(x)|). Optional robust companion to stddev/cov."
+        },
+        "late_trials": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Timed trials in this configuration whose worker start spread exceeded 1000 us, i.e. one worker was late off the barrier. Host preemption, not the workload: counted and reported next to cov, never dropped."
+        },
+        "canary_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many times this configuration was run before one was kept. >1 means an earlier attempt was discarded because the clock self-test showed host contention (a pre-declared rule, not outlier trimming)."
+        },
+        "clock_call_ns_start": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Mean back-to-back steady_clock::now() cost, ns, measured immediately before this configuration's trials. Over ~100 ns indicates a contended host."
+        },
+        "clock_call_ns_end": {
+          "type": "number",
+          "minimum": 0,
+          "description": "The same canary measured immediately after this configuration's trials."
+        }
       }
     },
-
     "run": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema_version", "run_id", "started_at", "finished_at", "machine", "argv", "results"],
+      "required": [
+        "schema_version",
+        "run_id",
+        "started_at",
+        "finished_at",
+        "machine",
+        "argv",
+        "results"
+      ],
       "properties": {
-        "schema_version": { "$ref": "#/$defs/schema_version" },
-        "run_id": { "$ref": "#/$defs/uuid" },
-        "started_at": { "$ref": "#/$defs/timestamp" },
-        "finished_at": { "$ref": "#/$defs/timestamp" },
-        "machine": { "$ref": "#/$defs/machine" },
-        "argv": { "type": "array", "items": { "type": "string" } },
-        "results": { "type": "array", "items": { "$ref": "#/$defs/run_result" } },
-        "summary": { "type": "array", "items": { "$ref": "#/$defs/summary" } }
+        "schema_version": {
+          "$ref": "#/$defs/schema_version"
+        },
+        "run_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "started_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "finished_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "machine": {
+          "$ref": "#/$defs/machine"
+        },
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/run_result"
+          }
+        },
+        "summary": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/summary"
+          }
+        }
       }
     }
   }

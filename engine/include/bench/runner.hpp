@@ -35,6 +35,14 @@ struct RunConfig {
     ColdMode cold = ColdMode::clflush; // per-trial cache preparation, done before the barrier
     bool pin = false;                  // pin worker i to cpus[i % cpus.size()]
     std::vector<int> cpus;             // empty => default_cpu_list(logical_cpus)
+    // Rotate through configurations trial-by-trial instead of finishing one before the
+    // next, so a slow drift (thermal, a background process) lands on all of them equally.
+    // Off by default: it keeps every configuration's pool alive at once, and those workers
+    // park on a futex between their turns rather than spinning.
+    bool interleave = false;
+    // How many times a configuration may be thrown away and re-run when the clock
+    // self-test says the host was contended (M1.2's canary). Sequential runs only.
+    int canary_retries = 3;
     bool verbose = false;
 };
 

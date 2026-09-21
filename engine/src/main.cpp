@@ -1,4 +1,4 @@
-// bench CLI: sysinfo | list | run | validate
+// bench CLI: sysinfo | list | run | report | validate
 #include "bench/cache.hpp"
 #include "bench/result.hpp"
 #include "bench/runner.hpp"
@@ -139,6 +139,15 @@ int main(int argc, char** argv) {
                     "Per-trial cache preparation before the barrier: clflush | evict | none")
         ->default_str("clflush")
         ->check(CLI::IsMember({"clflush", "evict", "none"}));
+    bool interleave = false;
+    run->add_flag("--interleave", interleave,
+                  "Rotate through configurations trial-by-trial instead of finishing one "
+                  "before the next (variance study; disables the clock-canary re-run)");
+    run->add_option("--canary-retries", cfg.canary_retries,
+                    "Times a configuration may be discarded and re-run when the clock "
+                    "self-test shows host contention (0 = never; sequential runs only)")
+        ->default_val(3)
+        ->check(CLI::NonNegativeNumber);
     std::string cpus_csv;
     bool pin = false;
     run->add_flag("--pin", pin,
@@ -170,6 +179,7 @@ int main(int argc, char** argv) {
         cfg.verbose = verbose;
         cfg.cold = bench::parse_cold_mode(cold_str).value(); // CLI11 already restricted it
         cfg.pin = pin;
+        cfg.interleave = interleave;
         for (const auto& c : split_csv(cpus_csv))
             cfg.cpus.push_back(std::stoi(c));
         if (!cfg.cpus.empty() && !pin)
@@ -206,6 +216,62 @@ int main(int argc, char** argv) {
             std::cerr << "bench: internal validation: " << p << '\n';
         const int rc = write_json(j, out_path, run_pretty);
         std::exit(problems.empty() ? rc : 2);
+    });
+
+    // ---- report --------------------------------------------------------------------
+    // The same numbers the dashboard's Trials page will show (M6.2), printed from a run
+    // file. Nothing is recomputed here: every column is read out of the `summary` array
+    // the engine wrote, so `bench report` cannot disagree with the JSON.
+    std::string report_path;
+    bool report_wide = false;
+    auto* report = app.add_subcommand("report", "Print the per-configuration summary table");
+    report->add_option("file", report_path, "Run JSON file")->required()->check(CLI::ExistingFile);
+    report->add_flag("--wide", report_wide, "Also show min/p5/p95/max and the run-quality columns");
+    report->callback([&] {
+        std::ifstream f{report_path};
+        bench::json j;
+        try {
+            j = bench::json::parse(f);
+        } catch (const bench::json::exception& e) {
+            std::cerr << "bench: " << report_path << ": not JSON: " << e.what() << '\n';
+            std::exit(1);
+        }
+        const auto problems = bench::validate_run(j);
+        for (const auto& p : problems)
+            std::cerr << "bench: warning: " << p << '\n';
+        if (!j.contains("summary") || !j["summary"].is_array() || j["summary"].empty()) {
+            std::cerr << "bench: " << report_path << ": no summary array\n";
+            std::exit(1);
+        }
+        if (j.contains("machine") && j["machine"].is_object())
+            std::cout << std::format("machine: {}  ({})\n", j["machine"].value("cpu_model", "?"),
+                                     j["machine"].value("os", "?"));
+        std::cout << std::format("run {}  {} -> {}\n", j.value("run_id", "?"),
+                                 j.value("started_at", "?"), j.value("finished_at", "?"));
+        std::cout << std::format("{:<12} {:>4} {:>10} {:>12} {:>12} {:>8} {:>8}", "METRIC", "THR",
+                                 "WS", "MEDIAN", "MEAN", "CoV%", "MAD/MED%");
+        if (report_wide)
+            std::cout << std::format(" {:>6} {:>12} {:>12} {:>7} {:>5} {:>7} {:>7}", "N", "MIN",
+                                     "MAX", "LATE%", "ATT", "CLK0", "CLK1");
+        std::cout << '\n';
+        for (const auto& s : j["summary"]) {
+            const double med = s.value("median", 0.0);
+            const double madpct = med != 0.0 ? s.value("mad", 0.0) / med * 100.0 : 0.0;
+            const int n = s.value("n", 0);
+            std::cout << std::format("{:<12} {:>4} {:>10} {:>12.4g} {:>12.4g} {:>8.2f} {:>8.2f}",
+                                     s.value("metric", "?"), s.value("thread_count", 0),
+                                     s.value("working_set_bytes", std::uint64_t{0}), med,
+                                     s.value("mean", 0.0), s.value("cov", 0.0) * 100.0, madpct);
+            if (report_wide)
+                std::cout << std::format(
+                    " {:>6} {:>12.4g} {:>12.4g} {:>7.1f} {:>5} {:>7.1f} {:>7.1f}", n,
+                    s.value("min", 0.0), s.value("max", 0.0),
+                    n > 0 ? 100.0 * s.value("late_trials", 0) / n : 0.0,
+                    s.value("canary_attempts", 1), s.value("clock_call_ns_start", 0.0),
+                    s.value("clock_call_ns_end", 0.0));
+            std::cout << '\n';
+        }
+        std::exit(problems.empty() ? 0 : 2);
     });
 
     // ---- validate ------------------------------------------------------------------

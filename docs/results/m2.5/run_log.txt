@@ -1,0 +1,71 @@
+M2.5 variance study, started 2026-09-21T00:04:22-05:00
+engine: bench 0.1.0
+
+=== target2_cpu_int
+    cmd:    engine/build/release/bench run -w cpu_int -t 1,16 -n 1000 --trial-ms 50 --warmup 20 --cold clflush --pin --out docs/results/m2.5/target2_cpu_int.json
+    before: power=Online battery=85% mode=Best performance  load: 1.00, 0.87, 0.87
+    after:  power=Online battery=86% mode=Best performance  load: 9.67, 3.27, 1.69
+    rc=0 elapsed=103s
+=== target2_cpu_fp
+    cmd:    engine/build/release/bench run -w cpu_fp -t 1,22 -n 1000 --trial-ms 50 --warmup 20 --cold clflush --pin --out docs/results/m2.5/target2_cpu_fp.json
+    before: power=Online battery=86% mode=Best performance  load: 9.67, 3.27, 1.69
+    after:  power=Online battery=88% mode=Best performance  load: 15.65, 6.41, 2.94
+    rc=0 elapsed=114s
+=== target2_cpu_hash
+    cmd:    engine/build/release/bench run -w cpu_hash -t 1,16 -n 1000 --trial-ms 50 --warmup 20 --cold clflush --pin --out docs/results/m2.5/target2_cpu_hash.json
+    before: power=Online battery=88% mode=Best performance  load: 15.65, 6.41, 2.94
+    after:  power=Online battery=89% mode=Best performance  load: 12.80, 7.40, 3.62
+    rc=0 elapsed=104s
+=== knob_pin_on
+    cmd:    engine/build/release/bench run -w cpu_int,cpu_fp,cpu_hash -t 1 -n 200 --trial-ms 50 --warmup 20 --cold clflush --pin --out docs/results/m2.5/knob_pin_on.json
+    before: power=Online battery=89% mode=Best performance  load: 12.80, 7.40, 3.62
+    after:  power=Online battery=90% mode=Best performance  load: 7.71, 6.72, 3.54
+    rc=0 elapsed=34s
+=== knob_pin_off
+    cmd:    engine/build/release/bench run -w cpu_int,cpu_fp,cpu_hash -t 1 -n 200 --trial-ms 50 --warmup 20 --cold clflush --out docs/results/m2.5/knob_pin_off.json
+    before: power=Online battery=90% mode=Best performance  load: 7.71, 6.72, 3.54
+    after:  power=Online battery=90% mode=Best performance  load: 4.88, 6.12, 3.45
+    rc=0 elapsed=379s
+=== knob_warmup_on
+    cmd:    engine/build/release/bench run -w cpu_int,cpu_fp,cpu_hash -t 1 -n 200 --trial-ms 50 --warmup 20 --warmup-ms 500 --cold clflush --out docs/results/m2.5/knob_warmup_on.json
+    before: power=Online battery=90% mode=Best performance  load: 4.88, 6.12, 3.45
+    after:  power=Online battery=90% mode=Best performance  load: 3.35, 5.63, 3.37
+    rc=0 elapsed=-311s
+=== knob_warmup_off
+    cmd:    engine/build/release/bench run -w cpu_int,cpu_fp,cpu_hash -t 1 -n 200 --trial-ms 50 --warmup 0 --warmup-ms 0 --spin-ms 0 --cold clflush --out docs/results/m2.5/knob_warmup_off.json
+    before: power=Online battery=90% mode=Best performance  load: 3.16, 5.55, 3.36
+    after:  power=Online battery=91% mode=Best performance  load: 2.31, 5.12, 3.28
+    rc=0 elapsed=30s
+=== knob_trialms_10
+    cmd:    engine/build/release/bench run -w cpu_int,cpu_fp,cpu_hash -t 1 -n 200 --trial-ms 10 --warmup 20 --cold clflush --out docs/results/m2.5/knob_trialms_10.json
+    before: power=Online battery=91% mode=Best performance  load: 2.31, 5.12, 3.28
+    after:  power=Online battery=91% mode=Best performance  load: 2.20, 5.05, 3.27
+    rc=0 elapsed=8s
+=== knob_trialms_50
+    cmd:    engine/build/release/bench run -w cpu_int,cpu_fp,cpu_hash -t 1 -n 200 --trial-ms 50 --warmup 20 --cold clflush --out docs/results/m2.5/knob_trialms_50.json
+    before: power=Online battery=91% mode=Best performance  load: 2.20, 5.05, 3.27
+    after:  power=Online battery=91% mode=Best performance  load: 1.72, 4.61, 3.19
+    rc=0 elapsed=34s
+=== knob_trialms_200
+    cmd:    engine/build/release/bench run -w cpu_int,cpu_fp,cpu_hash -t 1 -n 200 --trial-ms 200 --warmup 20 --cold clflush --out docs/results/m2.5/knob_trialms_200.json
+    before: power=Online battery=91% mode=Best performance  load: 1.72, 4.61, 3.19
+    after:  power=Online battery=92% mode=Best performance  load: 1.15, 3.33, 2.90
+    rc=0 elapsed=-211s
+=== interleave_off
+    cmd:    engine/build/release/bench run -w cpu_int,cpu_fp,cpu_hash -t 1 -n 300 --trial-ms 50 --warmup 20 --cold clflush --out docs/results/m2.5/interleave_off.json
+    before: power=Online battery=92% mode=Best performance  load: 1.15, 3.33, 2.90
+    after:  power=Online battery=93% mode=Best performance  load: 1.11, 2.99, 2.80
+    rc=0 elapsed=49s
+=== interleave_on
+    cmd:    engine/build/release/bench run -w cpu_int,cpu_fp,cpu_hash -t 1 -n 300 --trial-ms 50 --warmup 20 --cold clflush --interleave --out docs/results/m2.5/interleave_on.json
+    before: power=Online battery=93% mode=Best performance  load: 1.11, 2.99, 2.80
+    after:  power=Online battery=93% mode=Best performance  load: 1.05, 2.68, 2.71
+    rc=0 elapsed=50s
+finished 2026-09-21T00:16:35-05:00
+
+=== target2_trialms200 (appended pass)
+    cmd:    engine/build/release/bench run -w cpu_int,cpu_fp,cpu_hash -t 1 -n 1000 --trial-ms 200 --warmup 20 --pin --cold clflush
+    before: power=Online battery=97% mode=Best performance  load: 13.54, 6.37, 3.73
+    after:  power=Online battery=99% mode=Best performance  load: 1.09, 1.80, 2.45
+    rc=0 elapsed=612s
+TARGET2-200MS-DONE

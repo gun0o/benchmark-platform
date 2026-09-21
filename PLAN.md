@@ -464,10 +464,23 @@ browser with zero manual steps beyond `make up` and `make bench`.
   scaling flattens after ~6 threads. This is a real finding, plot it.
 - Done 2026-09-20 (write-up: `docs/notes/M2.4.md`, runs: `docs/results/m2.4/`, headline
   file: `docs/results/cpu_2026-09-20.json`, table: `docs/results/README.md`). Measured
-  plugged in, Windows plan Balanced, power mode **Best power efficiency**, battery low and
-  charging — left as found, so the numbers are a floor. **Target #1 met**: 3.711e10
-  (`cpu_int`, 16 threads), 8.587e10 (`cpu_fp`, 22), 1.083e9 (`cpu_hash`, 16), against a
-  1e7 bar. Deviations from the text above, all measured:
+  twice, plugged in, Windows plan Balanced: first under power mode **Best power
+  efficiency**, then re-run under **Best performance** ("Max Performance Overlay"), which
+  is the headline. **Target #1 met**: 4.011e10 (`cpu_int`, 16 threads), 1.000e11
+  (`cpu_fp`, 22), 1.244e9 (`cpu_hash`, 16), against a 1e7 bar. Deviations from the text
+  above, all measured:
+  - **The power mode was worth +8 % to +17 % on throughput and +13 % on the measured
+    clock (4.28 -> 4.83 GHz), and cut 1-thread CoV from 8-15 % to 2-4 %.** PLAN's "can
+    swing 20 %" pitfall is the right order of magnitude, but the variance effect is the
+    bigger one and is why M2.5 runs under Best performance. Two first-pass artefacts both
+    pointed here: scaling efficiency read an impossible 104-109 % at 2-4 threads (a
+    baseline measured at a wandering clock), and all three ops/cycle predictions fell
+    7-10 % short in the same direction (gap closed to 4-6 % on the re-run).
+  - **Correction to the first pass on pinning.** It reported pinning 6-9 % slower and
+    generalised that. At the best thread count the difference is -9.3 % (5.4 SE) for
+    `cpu_int` under Best power efficiency but +0.4 % (0.3 SE) under Best performance;
+    nothing reaches 2 SE in the Best performance run. Pinning hurts when the package is
+    power-limited and is a wash when it is not.
   - **Op counts moved onto the `Workload` concept as `kBatchOps`.** The runner computed
     `kItersPerBatch × kLanes`, which is only an op count when a lane is an op. `cpu_hash`'s
     four mixing lanes cooperate on one block, so that formula would have over-reported by
@@ -543,6 +556,52 @@ browser with zero manual steps beyond `make up` and `make bench`.
   which plan was active.
 - Postgres/Redis containers idle at ~0% CPU but Docker Desktop's VM does not; for the
   variance study stop compose (`make down`) and write results to a file, then post later.
+- Done 2026-09-21 (write-up: `docs/notes/M2.5.md`, runs: `docs/results/m2.5/`, headline:
+  `docs/results/variance_2026-09-21.md`). Measured plugged in, Windows plan Balanced, power
+  mode **Best performance**, containers stopped; power state recorded before and after
+  every run. **Target #2 NOT met.** Best over 1000 trials: **3.47 %** (`cpu_fp` @ 1 thread,
+  50 ms). Findings and deviations, all measured:
+  - **Two distinct noise regimes.** At 16-22 threads: thermal drift of 7.6-10.6 % across a
+    50 s configuration plus host preemption - `cpu_fp` @ 22 had a worker >1 ms late off the
+    barrier in **91.8 %** of trials. At 1 thread: zero late trials, negligible drift, and a
+    distribution indistinguishable from Gaussian (sd / 1.4826xMAD = 0.95-1.36); no single
+    culprit, the machine just does not repeat a 50 ms measurement better than ~3.5 %.
+  - **The two halves of the target fight each other on a laptop.** `--trial-ms 200` reaches
+    2.83 % at 100 trials, but Target #2 needs >=1000, which takes 200 s per configuration,
+    over which the package heats: re-measured at 1000 trials it gives 3.74-3.94 % (3.31 %
+    even with the drift removed arithmetically). Longer trials buy steadiness within a
+    trial and spend it on drift between trials.
+  - **The knob table needed alternating repetitions, not one pass each.** A single
+    A-then-B comparison confounds the knob with when it ran on a machine that drifts 10 %
+    per minute. Repeated 3x alternating: `--pin` and warmup are **washes** (ranges overlap,
+    sign inconsistent across workloads) - the single-pass result suggesting unpinned won
+    did not survive. Trial length is the only knob that moves CoV.
+  - **Warmup helps bias, not spread.** M1.2 measured trial 0 at 7-55 % below steady state
+    without it; CoV over 100 trials cannot see that, which is why the knob reads as a wash.
+  - **`--interleave` works as designed and does not reduce CoV.** Per-configuration drift
+    collapses from +5.3/-3.6 % to -0.2/-0.3 %; CoV is unchanged. It buys comparability
+    between configurations, not precision.
+  - **The clock canary rule took four attempts** and the final one departs from the text
+    above. A fixed sample count is not a detection window (100k samples = 1.4 ms, short
+    enough to fit between preemptions); 500k samples ate a whole `--max-seconds` budget
+    under ASan; an absolute 100 ns threshold fires on an *idle* ASan build (now() costs
+    ~144 ns there) and, made relative to a startup reading, went blind at 220 spinners
+    when that reading was itself contaminated. The rule is now scale-free: sample for a
+    fixed 8 ms of wall time and trip on **mean/min > 3**. Measured: quiet release 1.11,
+    quiet ASan ~1.03, release under 66 spinners 5.79 - where the absolute rule would have
+    said *clean* (mean 86.8 ns < 100). Failure is one-sided: it can keep bad data, never
+    discard good data.
+  - **The bimodality detector was calibrated against a known-null case first.** 1-D 2-means
+    splits any sample, including a unimodal one: on pure Gaussian noise it reports 50 % of
+    trials at a 1.5 sigma gap. The observed "29 % at 1.65 sigma" is therefore *not*
+    evidence of core migration. The metric now reports the gap in sigma with the null
+    alongside.
+  - **No trimming, no re-running until a number came out well, no quiet redefinition.** The
+    detrended CoV is labelled a diagnostic everywhere and never quoted as the CoV.
+  - 4 additive summary fields (`late_trials`, `canary_attempts`, `clock_call_ns_start`,
+    `clock_call_ns_end`) - schema first, then engine, then `bench validate`; no
+    `schema_version` bump. `bench report` added. 21 new tests; 117/117 in release, debug,
+    ci, asan and tsan; all 38 run files pass `bench validate` and `check-jsonschema`.
 
 ---
 

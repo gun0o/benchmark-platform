@@ -67,7 +67,11 @@ json to_json(const Summary& s) {
                 {"p5", s.p5},
                 {"p95", s.p95},
                 {"max", s.max},
-                {"mad", s.mad}};
+                {"mad", s.mad},
+                {"late_trials", s.late_trials},
+                {"canary_attempts", s.canary_attempts},
+                {"clock_call_ns_start", s.clock_call_ns_start},
+                {"clock_call_ns_end", s.clock_call_ns_end}};
 }
 
 json to_json(const RunEnvelope& run) {
@@ -150,7 +154,12 @@ Summary summary_from_json(const json& j) {
     s.p5 = get_required<double>(j, "p5", w);
     s.p95 = get_required<double>(j, "p95", w);
     s.max = get_required<double>(j, "max", w);
-    s.mad = j.value("mad", 0.0); // optional: older documents predate it
+    // All optional: documents written before M2.2 / M2.5 predate them.
+    s.mad = j.value("mad", 0.0);
+    s.late_trials = j.value("late_trials", 0);
+    s.canary_attempts = j.value("canary_attempts", 1);
+    s.clock_call_ns_start = j.value("clock_call_ns_start", 0.0);
+    s.clock_call_ns_end = j.value("clock_call_ns_end", 0.0);
     return s;
 }
 

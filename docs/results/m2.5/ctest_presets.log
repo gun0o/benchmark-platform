@@ -1,0 +1,38 @@
+M2.5 verify: full test suite across build presets
+2026-09-21T00:58:07-05:00
+ 00:58:07 up  9:30,  2 users,  load average: 2.61, 5.52, 3.99
+
+===== preset: release
+100% tests passed, 0 tests failed out of 117
+
+Label Time Summary:
+perf    =  10.85 sec*proc (11 tests)
+
+===== preset: debug
+100% tests passed, 0 tests failed out of 117
+
+Label Time Summary:
+perf    =  11.14 sec*proc (11 tests)
+
+===== preset: ci
+100% tests passed, 0 tests failed out of 117
+
+Label Time Summary:
+perf    =  10.80 sec*proc (11 tests)
+
+===== preset: asan
+100% tests passed, 0 tests failed out of 117
+
+Label Time Summary:
+perf    =   7.68 sec*proc (11 tests)
+
+===== preset: tsan
+100% tests passed, 0 tests failed out of 117
+
+Label Time Summary:
+perf    =   9.22 sec*proc (11 tests)
+
+perf-labelled subset, release:
+100% tests passed, 0 tests failed out of 11
+excluding perf (ctest --preset release -LE perf):
+100% tests passed, 0 tests failed out of 106

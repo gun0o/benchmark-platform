@@ -1,0 +1,31 @@
+M2.5 verify: bench report on the Target #2 runs
+2026-09-21T00:39:34-05:00
+
+$ bench report --wide target2_cpu_int.json
+machine: Intel(R) Core(TM) Ultra 9 185H  (Ubuntu 22.04.5 LTS)
+run 017b8a0e-2c68-4a95-b3e1-ed58ac43547c  2026-09-21T05:04:23.071742Z -> 2026-09-21T05:06:06.607876Z
+METRIC        THR         WS       MEDIAN         MEAN     CoV% MAD/MED%      N          MIN          MAX   LATE%   ATT    CLK0    CLK1
+cpu_int_ops     1          0    4.701e+09    4.685e+09     4.96     3.27   1000    2.859e+09    5.012e+09     0.0     1    14.5    14.4
+cpu_int_ops    16          0    3.907e+10    3.881e+10     6.03     3.39   1000    2.367e+10    4.333e+10     0.7     1    15.4    15.4
+
+$ bench report --wide target2_cpu_fp.json
+machine: Intel(R) Core(TM) Ultra 9 185H  (Ubuntu 22.04.5 LTS)
+run c160f29f-7761-495d-981e-ff17c7dc2a70  2026-09-21T05:06:07.235430Z -> 2026-09-21T05:08:00.816697Z
+METRIC        THR         WS       MEDIAN         MEAN     CoV% MAD/MED%      N          MIN          MAX   LATE%   ATT    CLK0    CLK1
+cpu_fp_ops      1          0    9.094e+09    9.129e+09     3.47     2.47   1000    7.077e+09    9.739e+09     0.0     1    13.8    17.4
+cpu_fp_ops     22          0    9.806e+10    9.647e+10     9.36     5.87   1000    5.748e+10    1.143e+11    91.8     1    15.1    14.7
+
+$ bench report --wide target2_cpu_hash.json
+machine: Intel(R) Core(TM) Ultra 9 185H  (Ubuntu 22.04.5 LTS)
+run 64584815-7796-4841-9d41-742b7be1daeb  2026-09-21T05:08:01.430261Z -> 2026-09-21T05:09:45.567111Z
+METRIC        THR         WS       MEDIAN         MEAN     CoV% MAD/MED%      N          MIN          MAX   LATE%   ATT    CLK0    CLK1
+cpu_hash_ops    1          0    1.485e+08     1.47e+08     4.02     1.98   1000    1.181e+08    1.558e+08     0.0     1    13.6    15.6
+cpu_hash_ops   16          0    1.206e+09    1.188e+09     7.36     3.23   1000    5.023e+08    1.356e+09     1.3     1    14.6    22.4
+
+$ bench report --wide target2_trialms200.json
+machine: Intel(R) Core(TM) Ultra 9 185H  (Ubuntu 22.04.5 LTS)
+run f2916523-9ef6-4b17-b3da-62ecc697e229  2026-09-21T05:28:21.690485Z -> 2026-09-21T05:38:32.993229Z
+METRIC        THR         WS       MEDIAN         MEAN     CoV% MAD/MED%      N          MIN          MAX   LATE%   ATT    CLK0    CLK1
+cpu_int_ops     1          0    4.852e+09    4.811e+09     3.88     2.66   1000    3.484e+09    5.026e+09     0.0     1    14.1    15.7
+cpu_fp_ops      1          0    9.345e+09    9.279e+09     3.94     3.03   1000    7.196e+09    9.753e+09     0.0     1    15.2    14.4
+cpu_hash_ops    1          0    1.537e+08    1.527e+08     3.74     2.87   1000    1.204e+08     1.61e+08     0.0     1    14.0    13.9
