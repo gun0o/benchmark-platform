@@ -1,0 +1,48 @@
+# M5.2 — query plans over the seeded data (112,510 rows, 6 machines), 2026-09-21T21:37:57Z
+# This completes the M5.1 verify step that could not be answered on a single-machine table.
+ANALYZE
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=0.045..0.068 rows=100 loops=1)
+   Buffers: shared hit=12
+   ->  Index Scan using measurements_filter_idx on measurements (actual time=0.044..0.063 rows=100 loops=1)
+         Index Cond: ((machine_id = '99603cddab4c9611187e9598ab33465b'::text) AND (metric = 'mem_read_bw'::text) AND (workload = 'mem_bw'::text) AND (thread_count = 4) AND (working_set_bytes = 67108864))
+         Buffers: shared hit=12
+ Planning:
+   Buffers: shared hit=76
+ Planning Time: 0.413 ms
+ Execution Time: 0.096 ms
+(9 rows)
+
+## With a keyset cursor
+                                                                                                         QUERY PLAN                                                                                                          
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=0.048..0.078 rows=100 loops=1)
+   Buffers: shared hit=12
+   ->  Index Scan using measurements_filter_idx on measurements (actual time=0.047..0.073 rows=100 loops=1)
+         Index Cond: ((machine_id = '99603cddab4c9611187e9598ab33465b'::text) AND (metric = 'mem_read_bw'::text) AND (workload = 'mem_bw'::text) AND (thread_count = 4) AND (working_set_bytes = 67108864) AND (id > 40000))
+         Buffers: shared hit=12
+ Planning:
+   Buffers: shared hit=212
+ Planning Time: 0.940 ms
+ Execution Time: 0.115 ms
+(9 rows)
+
+## A wider filter (machine + metric only), which is what the aggregate endpoints will run
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual time=0.748..0.749 rows=1 loops=1)
+   Buffers: shared hit=201
+   ->  Bitmap Heap Scan on measurements (actual time=0.330..0.576 rows=3000 loops=1)
+         Recheck Cond: ((machine_id = '99603cddab4c9611187e9598ab33465b'::text) AND (metric = 'mem_read_bw'::text))
+         Heap Blocks: exact=138
+         Buffers: shared hit=201
+         ->  Bitmap Index Scan on measurements_filter_idx (actual time=0.311..0.312 rows=3000 loops=1)
+               Index Cond: ((machine_id = '99603cddab4c9611187e9598ab33465b'::text) AND (metric = 'mem_read_bw'::text))
+               Buffers: shared hit=63
+ Planning:
+   Buffers: shared hit=178
+ Planning Time: 0.896 ms
+ Execution Time: 0.879 ms
+(13 rows)
+

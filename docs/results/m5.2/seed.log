@@ -1,0 +1,43 @@
+# M5.2 verify — 2026-09-21T21:36:37Z
+# Tables truncated first, then the engine's own M1.3 run re-posted so the database
+# holds one real machine alongside the five synthetic ones.
+
+$ time go run ./cmd/seed --post http://localhost:8080
+seed: 5 machines x 225 configurations x 100 trials = 112500 measurement rows
+seed: generated 112500 rows in 30 runs in 28ms
+seed: 112500 rows inserted, 112500 generated, total 5.077s
+real 5.15 s  user 0.28 s  sys 0.13 s
+
+$ psql -c 'select count(*) from measurements'
+ count  
+--------
+ 112510
+(1 row)
+
+
+## --out writes the same documents to a file
+$ go run ./cmd/seed --machines 5 --trials 100 --seed 42 --out seed.json
+seed: 5 machines x 225 configurations x 100 trials = 112500 measurement rows
+seed: generated 112500 rows in 30 runs in 28ms
+seed: wrote /tmp/claude-1000/-home-matthewlee-benchmark-platform/f5e09172-3231-40fc-b29f-1efd9bcd51fd/scratchpad/seed.json (43.0 MB)
+
+## The floor is enforced: a small run refuses to exit 0
+$ go run ./cmd/seed --machines 1 --trials 10 --out /dev/null ; echo "exit=$?"
+seed: 1 machines x 225 configurations x 10 trials = 2250 measurement rows
+seed: generated 2250 rows in 6 runs in 1ms
+seed: wrote /dev/null (0.0 MB)
+seed: 2250 rows is below the 100000-row floor; pass --allow-small if that is intended
+exit status 1
+exit=1
+
+$ go run ./cmd/seed --machines 1 --trials 10 --allow-small --out /dev/null ; echo "exit=$?"
+seed: 1 machines x 225 configurations x 10 trials = 2250 measurement rows
+seed: generated 2250 rows in 6 runs in 1ms
+seed: wrote /dev/null (0.0 MB)
+exit=0
+
+## Determinism, at the level of the file
+$ go run ./cmd/seed --seed 42 --out a.json && go run ./cmd/seed --seed 42 --out b.json && cmp a.json b.json
+identical (cmp exit 0)
+$ go run ./cmd/seed --seed 43 --out c.json && cmp a.json c.json
+/tmp/claude-1000/-home-matthewlee-benchmark-platform/f5e09172-3231-40fc-b29f-1efd9bcd51fd/scratchpad/a.json /tmp/claude-1000/-home-matthewlee-benchmark-platform/f5e09172-3231-40fc-b29f-1efd9bcd51fd/scratchpad/c.json differ: byte 33, line 2

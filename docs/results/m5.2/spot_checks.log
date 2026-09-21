@@ -1,0 +1,69 @@
+
+## All 12 metrics are present, with their units
+        metric         | unit  | rows  | machines | threads | working_sets 
+-----------------------+-------+-------+----------+---------+--------------
+ cpu_fp_ops            | ops/s |  2500 |        5 |       5 |            1
+ cpu_hash_ops          | ops/s |  2500 |        5 |       5 |            1
+ cpu_int_ops           | ops/s |  2510 |        6 |       5 |            1
+ disk_rand_read_iops   | IOPS  |  7500 |        5 |       5 |            3
+ disk_rand_read_p99_us | us    |  7500 |        5 |       5 |            3
+ disk_rand_write_iops  | IOPS  |  7500 |        5 |       5 |            3
+ disk_seq_read_bw      | MB/s  |  7500 |        5 |       5 |            3
+ disk_seq_write_bw     | MB/s  |  7500 |        5 |       5 |            3
+ mem_copy_bw           | GB/s  | 15000 |        5 |       5 |            6
+ mem_latency           | ns    | 22500 |        5 |       5 |            9
+ mem_read_bw           | GB/s  | 15000 |        5 |       5 |            6
+ mem_write_bw          | GB/s  | 15000 |        5 |       5 |            6
+(12 rows)
+
+## Machines
+   hostname    | cores | l3_kb  | runs | measurements 
+---------------+-------+--------+------+--------------
+ MatthewLaptop |    11 |  24576 |    1 |           10
+ synthetic-01  |    64 | 262144 |    6 |       135000
+ synthetic-02  |    14 |  24576 |    6 |       135000
+ synthetic-03  |     2 |  55296 |    6 |       135000
+ synthetic-04  |     4 |   6144 |    6 |       135000
+ synthetic-05  |    11 |  24576 |    6 |       135000
+(6 rows)
+
+## CoV per configuration computed in SQL, against the generator's sigma
+## (synthetic-01 sigma=1.0%, -02 2.5%, -03 4.0%, -04 1.5%, -05 3.5%;
+##  mem_latency is 1.4x sigma, disk_rand_read_p99_us 2.2x, disk_rand_write_iops 0.6x)
+   hostname   |        metric         | thr |  n  | cov_pct 
+--------------+-----------------------+-----+-----+---------
+ synthetic-01 | cpu_int_ops           |   4 | 100 |   1.185
+ synthetic-02 | cpu_int_ops           |   4 | 100 |   2.389
+ synthetic-03 | cpu_int_ops           |   4 | 100 |   3.989
+ synthetic-04 | cpu_int_ops           |   4 | 100 |   1.391
+ synthetic-05 | cpu_int_ops           |   4 | 100 |   3.440
+ synthetic-01 | disk_rand_read_p99_us |   4 | 100 |  36.570
+ synthetic-02 | disk_rand_read_p99_us |   4 | 100 |  23.372
+ synthetic-03 | disk_rand_read_p99_us |   4 | 100 |  38.748
+ synthetic-04 | disk_rand_read_p99_us |   4 | 100 |  44.619
+ synthetic-05 | disk_rand_read_p99_us |   4 | 100 |  37.329
+ synthetic-01 | disk_rand_write_iops  |   4 | 100 |   0.489
+ synthetic-02 | disk_rand_write_iops  |   4 | 100 |   1.752
+ synthetic-03 | disk_rand_write_iops  |   4 | 100 |   2.407
+ synthetic-04 | disk_rand_write_iops  |   4 | 100 |   0.897
+ synthetic-05 | disk_rand_write_iops  |   4 | 100 |   2.086
+ synthetic-01 | mem_latency           |   4 | 100 |   1.471
+ synthetic-02 | mem_latency           |   4 | 100 |   3.403
+ synthetic-03 | mem_latency           |   4 | 100 |   5.667
+ synthetic-04 | mem_latency           |   4 | 100 |   2.057
+ synthetic-05 | mem_latency           |   4 | 100 |   5.153
+ synthetic-01 | mem_read_bw           |   4 | 100 |   1.044
+ synthetic-02 | mem_read_bw           |   4 | 100 |   2.478
+ synthetic-03 | mem_read_bw           |   4 | 100 |   3.433
+ synthetic-04 | mem_read_bw           |   4 | 100 |   1.401
+ synthetic-05 | mem_read_bw           |   4 | 100 |   3.463
+(25 rows)
+
+
+## The same filters over HTTP, against SQL (synthetic-02 = 99603cddab4c9611187e9598ab33465b)
+  machine_id=99603cddab4c9611187e9598ab33465b                                                          api=22500   sql=22500   MATCH
+  metric=mem_latency                                                                                   api=22500   sql=22500   MATCH
+  workload=disk_rand                                                                                   api=22500   sql=22500   MATCH
+  thread_count=4                                                                                       api=22500   sql=22500   MATCH
+  working_set_bytes=67108864                                                                           api=7500    sql=7500    MATCH
+  machine_id=99603cddab4c9611187e9598ab33465b&metric=mem_read_bw&workload=mem_bw&thread_count=1&working_set_bytes=67108864 api=100     sql=100     MATCH
