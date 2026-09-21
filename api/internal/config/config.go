@@ -25,9 +25,12 @@ type Config struct {
 // Load reads the environment, applying defaults.
 func Load() Config {
 	return Config{
-		Addr:         env("API_ADDR", ":8080"),
-		DatabaseURL:  env("DATABASE_URL", "postgres://bench:bench@localhost:5432/bench?sslmode=disable"),
-		RedisURL:     env("REDIS_URL", "redis://localhost:6379/0"),
+		Addr:        env("API_ADDR", ":8080"),
+		DatabaseURL: env("DATABASE_URL", "postgres://bench:bench@localhost:5432/bench?sslmode=disable"),
+		// An explicitly empty REDIS_URL means "no cache", which is different from the
+		// variable being unset: the load test needs a way to turn the cache off without
+		// stopping the Redis the rest of the stack shares.
+		RedisURL:     envAllowEmpty("REDIS_URL", "redis://localhost:6379/0"),
 		PGMaxConns:   int32(envInt("PG_MAX_CONNS", 20)),
 		ReadTimeout:  envDuration("API_READ_TIMEOUT", 10*time.Second),
 		WriteTimeout: envDuration("API_WRITE_TIMEOUT", 60*time.Second),
@@ -40,6 +43,15 @@ func Load() Config {
 
 func env(key, def string) string {
 	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+// envAllowEmpty returns the variable's value even when it is the empty string, and the
+// default only when it is not set at all.
+func envAllowEmpty(key, def string) string {
+	if v, ok := os.LookupEnv(key); ok {
 		return v
 	}
 	return def

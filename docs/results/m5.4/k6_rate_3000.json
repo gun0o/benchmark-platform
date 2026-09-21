@@ -1,0 +1,957 @@
+{
+    "setup_data": {
+        "machines": [
+            "7fea9ecafd05d7a64f0fcd74cf35f695",
+            "1b7ba58e3740bc838210bbb73b4d14ff",
+            "99603cddab4c9611187e9598ab33465b",
+            "697e86048fed182dd326a41a7a6616f8",
+            "459fb3e9cd3d28e108dce9381fc75b28",
+            "ee1cfec3ffcbffd7f25d0e0afd92a5bc"
+        ],
+        "threads": [
+            1,
+            2,
+            4,
+            8,
+            16
+        ],
+        "combos": [
+            {
+                "machine": "7fea9ecafd05d7a64f0fcd74cf35f695",
+                "metric": "cpu_int_ops",
+                "sets": [
+                    0
+                ],
+                "workload": "cpu_int"
+            },
+            {
+                "sets": [
+                    0
+                ],
+                "workload": "cpu_fp",
+                "machine": "7fea9ecafd05d7a64f0fcd74cf35f695",
+                "metric": "cpu_fp_ops"
+            },
+            {
+                "machine": "7fea9ecafd05d7a64f0fcd74cf35f695",
+                "metric": "cpu_hash_ops",
+                "sets": [
+                    0
+                ],
+                "workload": "cpu_hash"
+            },
+            {
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw",
+                "machine": "7fea9ecafd05d7a64f0fcd74cf35f695",
+                "metric": "mem_read_bw"
+            },
+            {
+                "machine": "7fea9ecafd05d7a64f0fcd74cf35f695",
+                "metric": "mem_write_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw"
+            },
+            {
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw",
+                "machine": "7fea9ecafd05d7a64f0fcd74cf35f695",
+                "metric": "mem_copy_bw"
+            },
+            {
+                "sets": [
+                    4096,
+                    32768,
+                    131072,
+                    524288,
+                    2097152,
+                    8388608,
+                    33554432,
+                    268435456,
+                    1073741824
+                ],
+                "workload": "mem_latency",
+                "machine": "7fea9ecafd05d7a64f0fcd74cf35f695",
+                "metric": "mem_latency"
+            },
+            {
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_seq",
+                "machine": "7fea9ecafd05d7a64f0fcd74cf35f695",
+                "metric": "disk_seq_read_bw"
+            },
+            {
+                "metric": "disk_seq_write_bw",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_seq",
+                "machine": "7fea9ecafd05d7a64f0fcd74cf35f695"
+            },
+            {
+                "machine": "7fea9ecafd05d7a64f0fcd74cf35f695",
+                "metric": "disk_rand_read_iops",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_rand"
+            },
+            {
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_rand",
+                "machine": "7fea9ecafd05d7a64f0fcd74cf35f695",
+                "metric": "disk_rand_write_iops"
+            },
+            {
+                "metric": "disk_rand_read_p99_us",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_rand",
+                "machine": "7fea9ecafd05d7a64f0fcd74cf35f695"
+            },
+            {
+                "sets": [
+                    0
+                ],
+                "workload": "cpu_int",
+                "machine": "1b7ba58e3740bc838210bbb73b4d14ff",
+                "metric": "cpu_int_ops"
+            },
+            {
+                "metric": "cpu_fp_ops",
+                "sets": [
+                    0
+                ],
+                "workload": "cpu_fp",
+                "machine": "1b7ba58e3740bc838210bbb73b4d14ff"
+            },
+            {
+                "machine": "1b7ba58e3740bc838210bbb73b4d14ff",
+                "metric": "cpu_hash_ops",
+                "sets": [
+                    0
+                ],
+                "workload": "cpu_hash"
+            },
+            {
+                "machine": "1b7ba58e3740bc838210bbb73b4d14ff",
+                "metric": "mem_read_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw"
+            },
+            {
+                "machine": "1b7ba58e3740bc838210bbb73b4d14ff",
+                "metric": "mem_write_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw"
+            },
+            {
+                "machine": "1b7ba58e3740bc838210bbb73b4d14ff",
+                "metric": "mem_copy_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw"
+            },
+            {
+                "machine": "1b7ba58e3740bc838210bbb73b4d14ff",
+                "metric": "mem_latency",
+                "sets": [
+                    4096,
+                    32768,
+                    131072,
+                    524288,
+                    2097152,
+                    8388608,
+                    33554432,
+                    268435456,
+                    1073741824
+                ],
+                "workload": "mem_latency"
+            },
+            {
+                "machine": "1b7ba58e3740bc838210bbb73b4d14ff",
+                "metric": "disk_seq_read_bw",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_seq"
+            },
+            {
+                "machine": "1b7ba58e3740bc838210bbb73b4d14ff",
+                "metric": "disk_seq_write_bw",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_seq"
+            },
+            {
+                "metric": "disk_rand_read_iops",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_rand",
+                "machine": "1b7ba58e3740bc838210bbb73b4d14ff"
+            },
+            {
+                "workload": "disk_rand",
+                "machine": "1b7ba58e3740bc838210bbb73b4d14ff",
+                "metric": "disk_rand_write_iops",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ]
+            },
+            {
+                "workload": "disk_rand",
+                "machine": "1b7ba58e3740bc838210bbb73b4d14ff",
+                "metric": "disk_rand_read_p99_us",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ]
+            },
+            {
+                "workload": "cpu_int",
+                "machine": "99603cddab4c9611187e9598ab33465b",
+                "metric": "cpu_int_ops",
+                "sets": [
+                    0
+                ]
+            },
+            {
+                "metric": "cpu_fp_ops",
+                "sets": [
+                    0
+                ],
+                "workload": "cpu_fp",
+                "machine": "99603cddab4c9611187e9598ab33465b"
+            },
+            {
+                "workload": "cpu_hash",
+                "machine": "99603cddab4c9611187e9598ab33465b",
+                "metric": "cpu_hash_ops",
+                "sets": [
+                    0
+                ]
+            },
+            {
+                "machine": "99603cddab4c9611187e9598ab33465b",
+                "metric": "mem_read_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw"
+            },
+            {
+                "machine": "99603cddab4c9611187e9598ab33465b",
+                "metric": "mem_write_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw"
+            },
+            {
+                "machine": "99603cddab4c9611187e9598ab33465b",
+                "metric": "mem_copy_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw"
+            },
+            {
+                "machine": "99603cddab4c9611187e9598ab33465b",
+                "metric": "mem_latency",
+                "sets": [
+                    4096,
+                    32768,
+                    131072,
+                    524288,
+                    2097152,
+                    8388608,
+                    33554432,
+                    268435456,
+                    1073741824
+                ],
+                "workload": "mem_latency"
+            },
+            {
+                "machine": "99603cddab4c9611187e9598ab33465b",
+                "metric": "disk_seq_read_bw",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_seq"
+            },
+            {
+                "workload": "disk_seq",
+                "machine": "99603cddab4c9611187e9598ab33465b",
+                "metric": "disk_seq_write_bw",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ]
+            },
+            {
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_rand",
+                "machine": "99603cddab4c9611187e9598ab33465b",
+                "metric": "disk_rand_read_iops"
+            },
+            {
+                "machine": "99603cddab4c9611187e9598ab33465b",
+                "metric": "disk_rand_write_iops",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_rand"
+            },
+            {
+                "machine": "99603cddab4c9611187e9598ab33465b",
+                "metric": "disk_rand_read_p99_us",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_rand"
+            },
+            {
+                "workload": "cpu_int",
+                "machine": "697e86048fed182dd326a41a7a6616f8",
+                "metric": "cpu_int_ops",
+                "sets": [
+                    0
+                ]
+            },
+            {
+                "workload": "cpu_fp",
+                "machine": "697e86048fed182dd326a41a7a6616f8",
+                "metric": "cpu_fp_ops",
+                "sets": [
+                    0
+                ]
+            },
+            {
+                "sets": [
+                    0
+                ],
+                "workload": "cpu_hash",
+                "machine": "697e86048fed182dd326a41a7a6616f8",
+                "metric": "cpu_hash_ops"
+            },
+            {
+                "workload": "mem_bw",
+                "machine": "697e86048fed182dd326a41a7a6616f8",
+                "metric": "mem_read_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ]
+            },
+            {
+                "workload": "mem_bw",
+                "machine": "697e86048fed182dd326a41a7a6616f8",
+                "metric": "mem_write_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ]
+            },
+            {
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw",
+                "machine": "697e86048fed182dd326a41a7a6616f8",
+                "metric": "mem_copy_bw"
+            },
+            {
+                "machine": "697e86048fed182dd326a41a7a6616f8",
+                "metric": "mem_latency",
+                "sets": [
+                    4096,
+                    32768,
+                    131072,
+                    524288,
+                    2097152,
+                    8388608,
+                    33554432,
+                    268435456,
+                    1073741824
+                ],
+                "workload": "mem_latency"
+            },
+            {
+                "machine": "697e86048fed182dd326a41a7a6616f8",
+                "metric": "disk_seq_read_bw",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_seq"
+            },
+            {
+                "machine": "697e86048fed182dd326a41a7a6616f8",
+                "metric": "disk_seq_write_bw",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_seq"
+            },
+            {
+                "machine": "697e86048fed182dd326a41a7a6616f8",
+                "metric": "disk_rand_read_iops",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_rand"
+            },
+            {
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_rand",
+                "machine": "697e86048fed182dd326a41a7a6616f8",
+                "metric": "disk_rand_write_iops"
+            },
+            {
+                "workload": "disk_rand",
+                "machine": "697e86048fed182dd326a41a7a6616f8",
+                "metric": "disk_rand_read_p99_us",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ]
+            },
+            {
+                "sets": [
+                    0
+                ],
+                "workload": "cpu_int",
+                "machine": "459fb3e9cd3d28e108dce9381fc75b28",
+                "metric": "cpu_int_ops"
+            },
+            {
+                "workload": "cpu_fp",
+                "machine": "459fb3e9cd3d28e108dce9381fc75b28",
+                "metric": "cpu_fp_ops",
+                "sets": [
+                    0
+                ]
+            },
+            {
+                "machine": "459fb3e9cd3d28e108dce9381fc75b28",
+                "metric": "cpu_hash_ops",
+                "sets": [
+                    0
+                ],
+                "workload": "cpu_hash"
+            },
+            {
+                "machine": "459fb3e9cd3d28e108dce9381fc75b28",
+                "metric": "mem_read_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw"
+            },
+            {
+                "machine": "459fb3e9cd3d28e108dce9381fc75b28",
+                "metric": "mem_write_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw"
+            },
+            {
+                "machine": "459fb3e9cd3d28e108dce9381fc75b28",
+                "metric": "mem_copy_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw"
+            },
+            {
+                "machine": "459fb3e9cd3d28e108dce9381fc75b28",
+                "metric": "mem_latency",
+                "sets": [
+                    4096,
+                    32768,
+                    131072,
+                    524288,
+                    2097152,
+                    8388608,
+                    33554432,
+                    268435456,
+                    1073741824
+                ],
+                "workload": "mem_latency"
+            },
+            {
+                "workload": "disk_seq",
+                "machine": "459fb3e9cd3d28e108dce9381fc75b28",
+                "metric": "disk_seq_read_bw",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ]
+            },
+            {
+                "machine": "459fb3e9cd3d28e108dce9381fc75b28",
+                "metric": "disk_seq_write_bw",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_seq"
+            },
+            {
+                "metric": "disk_rand_read_iops",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_rand",
+                "machine": "459fb3e9cd3d28e108dce9381fc75b28"
+            },
+            {
+                "machine": "459fb3e9cd3d28e108dce9381fc75b28",
+                "metric": "disk_rand_write_iops",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_rand"
+            },
+            {
+                "machine": "459fb3e9cd3d28e108dce9381fc75b28",
+                "metric": "disk_rand_read_p99_us",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_rand"
+            },
+            {
+                "machine": "ee1cfec3ffcbffd7f25d0e0afd92a5bc",
+                "metric": "cpu_int_ops",
+                "sets": [
+                    0
+                ],
+                "workload": "cpu_int"
+            },
+            {
+                "machine": "ee1cfec3ffcbffd7f25d0e0afd92a5bc",
+                "metric": "cpu_fp_ops",
+                "sets": [
+                    0
+                ],
+                "workload": "cpu_fp"
+            },
+            {
+                "metric": "cpu_hash_ops",
+                "sets": [
+                    0
+                ],
+                "workload": "cpu_hash",
+                "machine": "ee1cfec3ffcbffd7f25d0e0afd92a5bc"
+            },
+            {
+                "machine": "ee1cfec3ffcbffd7f25d0e0afd92a5bc",
+                "metric": "mem_read_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw"
+            },
+            {
+                "machine": "ee1cfec3ffcbffd7f25d0e0afd92a5bc",
+                "metric": "mem_write_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw"
+            },
+            {
+                "metric": "mem_copy_bw",
+                "sets": [
+                    32768,
+                    262144,
+                    2097152,
+                    8388608,
+                    67108864,
+                    536870912
+                ],
+                "workload": "mem_bw",
+                "machine": "ee1cfec3ffcbffd7f25d0e0afd92a5bc"
+            },
+            {
+                "metric": "mem_latency",
+                "sets": [
+                    4096,
+                    32768,
+                    131072,
+                    524288,
+                    2097152,
+                    8388608,
+                    33554432,
+                    268435456,
+                    1073741824
+                ],
+                "workload": "mem_latency",
+                "machine": "ee1cfec3ffcbffd7f25d0e0afd92a5bc"
+            },
+            {
+                "metric": "disk_seq_read_bw",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_seq",
+                "machine": "ee1cfec3ffcbffd7f25d0e0afd92a5bc"
+            },
+            {
+                "machine": "ee1cfec3ffcbffd7f25d0e0afd92a5bc",
+                "metric": "disk_seq_write_bw",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_seq"
+            },
+            {
+                "metric": "disk_rand_read_iops",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_rand",
+                "machine": "ee1cfec3ffcbffd7f25d0e0afd92a5bc"
+            },
+            {
+                "machine": "ee1cfec3ffcbffd7f25d0e0afd92a5bc",
+                "metric": "disk_rand_write_iops",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ],
+                "workload": "disk_rand"
+            },
+            {
+                "workload": "disk_rand",
+                "machine": "ee1cfec3ffcbffd7f25d0e0afd92a5bc",
+                "metric": "disk_rand_read_p99_us",
+                "sets": [
+                    1073741824,
+                    2147483648,
+                    4294967296
+                ]
+            }
+        ]
+    },
+    "root_group": {
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "status is 200": {
+                    "path": "::status is 200",
+                    "id": "6210a8cd14cd70477eba5c5e4cb3fb5f",
+                    "passes": 95976,
+                    "fails": 0,
+                    "name": "status is 200"
+                }
+            },
+        "name": "",
+        "path": ""
+    },
+    "metrics": {
+        "cache_misses": {
+            "count": 1490,
+            "rate": 37.134395113553836
+        },
+        "checks": {
+            "passes": 95976,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.999": false
+            },
+            "value": 1
+        },
+        "dropped_iterations": {
+            "count": 26,
+            "rate": 0.6479827335251005,
+            "thresholds": {
+                "count==0": true
+            }
+        },
+        "http_req_failed{scenario:measured}": {
+            "passes": 0,
+            "fails": 89975,
+            "thresholds": {
+                "rate<0.001": false
+            },
+            "value": 0
+        },
+        "vus": {
+            "max": 5,
+            "value": 2,
+            "min": 0
+        },
+        "http_req_receiving": {
+            "med": 0.032846,
+            "max": 5.356973,
+            "p(90)": 0.06123640000000001,
+            "p(95)": 0.0752408,
+            "avg": 0.03855631348135484,
+            "min": 0.005262
+        },
+        "http_req_duration{scenario:measured}": {
+            "avg": 0.5389378100250088,
+            "min": 0.189314,
+            "med": 0.364734,
+            "max": 53.213897,
+            "p(90)": 0.9354266000000002,
+            "p(95)": 1.0943007000000002,
+            "thresholds": {
+                "p(95)<50": false
+            }
+        },
+        "http_req_duration": {
+            "min": 0.189314,
+            "med": 0.366626,
+            "max": 99.543276,
+            "p(90)": 0.9354818000000008,
+            "p(95)": 1.0969086000000001,
+            "avg": 0.536739673234212
+        },
+        "http_req_duration{expected_response:true}": {
+            "avg": 0.536739673234212,
+            "min": 0.189314,
+            "med": 0.366626,
+            "max": 99.543276,
+            "p(90)": 0.9354818000000008,
+            "p(95)": 1.0969086000000001
+        },
+        "vus_max": {
+            "min": 150,
+            "max": 162,
+            "value": 162
+        },
+        "iterations": {
+            "count": 95976,
+            "rate": 2391.9534935694246
+        },
+        "http_req_waiting": {
+            "avg": 0.48559909734624634,
+            "min": 0.147996,
+            "med": 0.318628,
+            "max": 99.205618,
+            "p(90)": 0.8669942000000002,
+            "p(95)": 1.0196353999999999
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 95977,
+            "value": 0
+        },
+        "data_sent": {
+            "count": 19808692,
+            "rate": 493680.3996044919
+        },
+        "iteration_duration": {
+            "max": 79.709015,
+            "p(90)": 1.022704,
+            "p(95)": 1.1926999999999999,
+            "avg": 0.6372567323289149,
+            "min": 0.256937,
+            "med": 0.45771700000000004
+        },
+        "http_req_blocked": {
+            "avg": 0.013246484647363213,
+            "min": 0.00104,
+            "med": 0.003003,
+            "max": 36.530265,
+            "p(90)": 0.003923,
+            "p(95)": 0.004502
+        },
+        "http_req_sending": {
+            "p(95)": 0.028405999999999956,
+            "avg": 0.012584262406618222,
+            "min": 0.003318,
+            "med": 0.007396,
+            "max": 12.224726,
+            "p(90)": 0.020727
+        },
+        "cache_hits": {
+            "count": 79959,
+            "rate": 1992.771207305135
+        },
+        "http_reqs": {
+            "count": 95977,
+            "rate": 2391.9784159822525
+        },
+        "http_req_connecting": {
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0.009528422726278175,
+            "min": 0,
+            "med": 0,
+            "max": 36.06669
+        },
+        "http_req_tls_handshaking": {
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "data_received": {
+            "count": 699376407,
+            "rate": 17430147.537339356
+        }
+    }
+}

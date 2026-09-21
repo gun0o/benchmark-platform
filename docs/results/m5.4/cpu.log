@@ -1,0 +1,29 @@
+# M5.4 — CPU during the load test, 2026-09-21T22:47:16Z
+#
+# Sampled from /proc/<pid>/stat over 5-second windows (a rate, not the lifetime
+# average that ps -o pcpu reports) and docker stats for the containers.
+# The machine has 22 vCPUs, so 100% is one of them.
+
+## 1000 req/s (the Target #4 rate)
+apisrv 11%  k6 14%  postgres 8.18%  redis 1.75%
+apisrv 17%  k6 20%  postgres 12.30%  redis 4.20%
+apisrv 30%  k6 37%  postgres 7.80%  redis 4.18%
+apisrv 30%  k6 37%  postgres 7.39%  redis 4.01%
+apisrv 30%  k6 37%  postgres 7.87%  redis 4.33%
+apisrv 29%  k6 36%  postgres 8.84%  redis 3.88%
+apisrv 29%  k6 35%  postgres 5.66%  redis 0.41%
+apisrv 0%  k6 0%  postgres 0.00%  redis 0.44%
+
+## 12000 req/s (past the point where k6 can keep up: 1072 dropped iterations,
+## 10,052 req/s actually achieved)
+apisrv 66%  k6 85%  postgres 22.11%  redis 10.25%
+apisrv 160%  k6 189%  postgres 119.91%  redis 35.98%
+apisrv 316%  k6 361%  postgres 107.22%  redis 36.27%
+apisrv 329%  k6 372%  postgres 112.19%  redis 35.00%
+apisrv 319%  k6 359%  postgres 110.35%  redis 36.59%
+apisrv 320%  k6 354%  postgres 104.04%  redis 35.64%
+apisrv 327%  k6 365%  postgres 95.32%  redis 0.47%
+apisrv 0%  k6 0%  postgres 0.03%  redis 0.55%
+
+# k6 is the largest single consumer at the high rate. It shares the 22 vCPUs with
+# everything it is measuring, so the latencies above are conservative.

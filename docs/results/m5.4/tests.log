@@ -1,0 +1,33 @@
+$ go test ./...
+?   	github.com/matthewlee/benchmark-platform/api/cmd/api	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/cmd/migrate	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/cmd/seed	[no test files]
+ok  	github.com/matthewlee/benchmark-platform/api/internal/cache	1.614s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/config	0.002s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/http	0.020s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/lttb	0.002s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/model	0.237s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/seed	0.120s
+?   	github.com/matthewlee/benchmark-platform/api/internal/store	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/migrations	[no test files]
+
+$ go test -tags integration ./...
+?   	github.com/matthewlee/benchmark-platform/api/cmd/api	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/cmd/migrate	[no test files]
+?   	github.com/matthewlee/benchmark-platform/api/cmd/seed	[no test files]
+ok  	github.com/matthewlee/benchmark-platform/api/internal/cache	1.613s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/config	0.002s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/http	0.022s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/lttb	0.002s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/model	0.245s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/seed	0.125s
+ok  	github.com/matthewlee/benchmark-platform/api/internal/store	18.098s
+?   	github.com/matthewlee/benchmark-platform/api/migrations	[no test files]
+
+$ go vet ./... && gofmt -l .
+(clean)
+
+$ each profile runs (short scenarios, so mixed.js exercises its own executors)
+read_heavy.js      checks_succeeded...: 100.00% 46 out of 46
+ingest.js          checks_succeeded...: 100.00% 22 out of 22
+mixed.js           checks_succeeded...: 100.00% 66 out of 66
