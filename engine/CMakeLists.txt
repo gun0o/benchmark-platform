@@ -87,7 +87,8 @@ add_library(bench_core STATIC
   src/workloads/cpu_int.cpp
   src/workloads/cpu_fp.cpp
   src/workloads/cpu_hash.cpp
-  src/workloads/mem_bw.cpp)
+  src/workloads/mem_bw.cpp
+  src/workloads/mem_latency.cpp)
 target_include_directories(bench_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(bench_core PUBLIC nlohmann_json::nlohmann_json bench_options)
 target_compile_definitions(bench_core PRIVATE

@@ -87,6 +87,14 @@ ValueRule value_rule_of(Metric m) noexcept;
 
 // value for every rule except latency_p99_us, which the runner computes from the histogram.
 // elapsed_ns == 0 or units == 0 yields 0 rather than an infinity: a result must be finite.
-double value_from_units(Metric m, std::uint64_t units, std::uint64_t elapsed_ns) noexcept;
+//
+// `threads` matters only for ns_per_unit, and it matters a lot. A latency is the time one
+// dependent load takes on one thread. N threads chasing N independent chains for T
+// nanoseconds perform N x loads and still take T nanoseconds per load *each*, so dividing
+// wall time by the summed load count would report the latency divided by N - a number that
+// falls as you add threads, which is the opposite of what loaded latency does. Rates have
+// no such problem: they are summed across threads on purpose.
+double value_from_units(Metric m, std::uint64_t units, std::uint64_t elapsed_ns,
+                        int threads = 1) noexcept;
 
 } // namespace bench

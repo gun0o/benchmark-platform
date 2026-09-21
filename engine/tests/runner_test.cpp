@@ -125,7 +125,7 @@ TEST(Runner, RejectsBadConfig) {
 
 TEST(Runner, UnimplementedWorkloadThrows) {
     RunConfig c = quick(1, 0, 5);
-    c.workloads = {Workload::mem_latency};
+    c.workloads = {Workload::disk_seq};
     EXPECT_THROW(run_benchmarks(c, MachineInfo{}, {"bench"}), std::runtime_error);
 }
 

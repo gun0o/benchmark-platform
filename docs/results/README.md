@@ -91,6 +91,47 @@ the coordinator. It is published with its `late_trials` count, not dropped.
 No CoV claim is made from these runs: 10 trials is enough to draw a curve, not to state a
 variance. That is M3.3.
 
+## Cache latency — M3.2, 2026-09-21
+
+Source: `m3.2/`. Nanoseconds per dependent load in a random cyclic pointer chase (Sattolo),
+1 thread, warm. The sweep was run **five times in five separate processes**; the figures
+below are medians of the five pass medians. Same power state as above. Full tables:
+`m3.2/analysis.md`; reasoning: `docs/notes/M3.2.md`.
+
+| working set | ns/load | what it is |
+|---|---:|---|
+| 4 KiB | **1.02** | L1d — 4.9 cycles at the 4.83 GHz measured in M2.4 |
+| 48 KiB | 1.10 | L1d, exactly at capacity |
+| 64 KiB | **3.25** | the L1→L2 step, at the size `sysinfo` reports |
+| 2 MiB | 6.07 | L2 (2 MiB per core), at capacity |
+| 8 MiB | 46.01 | **bimodal**, 28–107 across passes — not a usable L3 figure |
+| 24 MiB | 146.40 | DRAM |
+| 1 GiB | **175.78** | DRAM |
+
+The cleanest result in the project so far is the L1 step: latency triples between two
+adjacent sweep points, at a cache size nothing told the benchmark about.
+
+**There is no L3 plateau.** Between 4 MiB and 24 MiB — all of it inside a 24 MiB L3 —
+latency climbs by a factor of ten with no flat region, and the 8 MiB point is bimodal: eight
+separate runs gave 17.0, 17.2, 18.6, 19.3, 29.0, 35.9, 107.5, 129.9 ns. The *same vCPU id*
+produced both clusters. Under WSL2 the guest cannot pin a thread to a physical core, and on
+this hybrid part the core types do not share a path to the last-level cache. The
+distribution is the result; there is no single L3 latency to quote.
+
+**DRAM is 146–176 ns**, against PLAN.md's expected 90–110. These are the most repeatable
+points in the sweep (pass-to-pass spread 1.0×), so the gap is not noise — it is the VM plus
+a working set far larger than the flushed 256 KiB chase M2.3 measured 105 ns on. Latency
+keeps rising after the caches are exhausted (+20 % from 24 MiB to 1 GiB) and that is *not*
+the TLB: the huge-page grant is measured per buffer and every point ≥ 2 MiB got 100 %.
+
+Turning huge pages off costs 7–12 % at ≥ 64 MiB. `--cold clflush` is 6.62× warm at 8 MiB,
+because a cold lap of a 131072-line chase eats 16 ms of a 30 ms trial — on a chase, cold
+mode is only interpretable when the trial completes many laps.
+
+A preliminary variance note, *not* a Target #2 measurement: at 1 MiB over 200 trials,
+`--cold clflush` gives CoV 33.97 % against warm's 8.59 %. Cold mode made repeatability
+worse, which is the opposite of M3.3's stated hypothesis. Recorded for M3.3.
+
 ## Index
 
 | directory | milestone | what it holds |
@@ -102,6 +143,7 @@ variance. That is M3.3.
 | `m2.4/` | M2.4 | the three CPU kernels, the thread sweep, Target #1, frequency probe |
 | `m2.5/` | M2.5 | the variance study: Target #2, the knob A/B, interleaving, the clock canary |
 | `m3.1/` | M3.1 | memory bandwidth: the working-set sweep, the thread knee, write-allocate, `--nt` |
+| `m3.2/` | M3.2 | cache latency: the pointer chase, the L1/L2 steps, huge pages, cold-vs-warm |
 
 ## Targets
 

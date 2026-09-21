@@ -1,0 +1,31 @@
+# M3.2 - all five presets, after mem_latency.
+# 2026-09-21T11:56:50-05:00
+
+### ctest --preset release
+100% tests passed, 0 tests failed out of 152
+perf    =  14.13 sec*proc (16 tests)
+Total Test time (real) =  19.96 sec
+
+### ctest --preset debug
+100% tests passed, 0 tests failed out of 152
+perf    =  11.03 sec*proc (16 tests)
+Total Test time (real) =  17.43 sec
+
+### ctest --preset ci
+100% tests passed, 0 tests failed out of 152
+perf    =  14.15 sec*proc (16 tests)
+Total Test time (real) =  19.98 sec
+
+### ctest --preset asan
+100% tests passed, 0 tests failed out of 152
+perf    =   7.82 sec*proc (16 tests)
+Total Test time (real) =  19.57 sec
+
+### ctest --preset tsan
+100% tests passed, 0 tests failed out of 152
+perf    =   9.32 sec*proc (16 tests)
+Total Test time (real) =  18.39 sec
+
+# Note: one earlier asan run of this suite reported a single failure whose name was not
+# captured by the logging wrapper. Eight consecutive asan re-runs since have been clean,
+# so it is recorded here as an unidentified flake rather than ignored. See docs/notes/M3.2.md.

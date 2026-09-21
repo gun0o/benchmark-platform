@@ -1,0 +1,28 @@
+# M3.2 - what one "dependent load" compiles to
+#
+# Command: objdump -d --no-show-raw-insn \
+#            build/release/CMakeFiles/bench_core.dir/src/workloads/mem_latency.cpp.o
+# g++ 13, -O3 -march=native, Intel Core Ultra 9 185H.
+#
+# The chase kernel is one instruction per operation. x86 addresses as base + index*8, so
+# `idx = words[idx]` is a single `mov (%rdi,%rax,8),%rax` whose result is also its next
+# address - there is nothing between two loads for the machine to overlap them with, which
+# is what makes this a latency measurement rather than a bandwidth one. GCC does not
+# unroll it (there is no point: the loop is one dependent load deep) and does not
+# vectorize it (it cannot - the addresses are not known in advance).
+#
+# Full disassembly of run_batch() (12 instructions):
+
+0000000000000030 <_ZN5bench18MemLatencyWorkload9run_batchEv>:
+      30:	endbr64 
+      34:	mov    (%rdi),%rcx
+      37:	mov    0x30(%rdi),%rdx
+      3b:	mov    $0x10000,%eax
+      40:	sub    $0x1,%rax
+      44:	mov    (%rcx,%rdx,8),%rdx
+      48:	jne    40 <_ZN5bench18MemLatencyWorkload9run_batchEv+0x10>
+      4a:	mov    $0x10000,%eax
+      4f:	mov    %rdx,0x30(%rdi)
+      53:	ret    
+      54:	data16 cs nopw 0x0(%rax,%rax,1)
+      5f:	nop

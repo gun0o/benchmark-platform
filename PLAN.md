@@ -693,6 +693,55 @@ browser with zero manual steps beyond `make up` and `make bench`.
 - Multi-thread latency (`--threads N`) measures loaded latency; label it as such.
 - WSL2's THP setting may be `madvise` or `never`; the engine reads
   `/sys/kernel/mm/transparent_hugepage/enabled` and records it.
+- Done 2026-09-21 (write-up: `docs/notes/M3.2.md`, runs: `docs/results/m3.2/`, caveats in
+  `docs/methodology.md`). Measured plugged in, Windows plan Balanced, power mode **Best
+  performance**, containers stopped; power state recorded before and after every run. The
+  sweep was run **five times in five separate processes**, for the reason in the third bullet
+  below. Findings and deviations, all measured:
+  - **The L1 step lands exactly on the cache size.** 48 KiB reads 1.10 ns/load, 64 KiB reads
+    3.25 - a 3x step at a size nothing told the benchmark about. 1.02 ns at 4 KiB is 4.9
+    cycles at the 4.83 GHz M2.4 measured, i.e. the textbook 5-cycle L1d load-to-use.
+  - **There is no L3 plateau on this machine.** Between 4 and 24 MiB, all inside a 24 MiB
+    L3, latency climbs 15.3 -> 146 ns with no flat region. The step pattern PLAN.md predicts
+    exists for L1 and L2 and does not exist for L3.
+  - **The 8 MiB point is bimodal**: eight separate runs gave 17.0, 17.2, 18.6, 19.3, 29.0,
+    35.9, 107.5, 129.9 ns - two clusters, and the *same vCPU id* produced both. Under WSL2
+    the guest cannot pin to a physical core and the hybrid core types do not share a path to
+    L3. The `perf` suite therefore asserts the L1-vs-DRAM ratio (150x measured, 10x asserted)
+    and deliberately does **not** assert the L2->L3 step: that test would fail a quarter of
+    the time on a correct engine.
+  - **DRAM is 146-176 ns, not PLAN.md's 90-110**, and these are the sweep's *most* repeatable
+    points (pass spread 1.0x), so the gap is not noise. Latency keeps rising after every
+    cache is exhausted (146 ns at 24 MiB -> 176 at 1 GiB, +20 %) and it is **not** the TLB:
+    the huge-page grant is measured per buffer and every point from 2 MiB up got 100 %.
+    It is DRAM row/bank locality over a wider address span.
+  - **`--no-hugepages` costs 7-12 % at >= 64 MiB** - the predicted direction, a smaller size
+    than "noticeably" suggests, because a page walk is four *cached* accesses against a
+    ~195 ns DRAM hit.
+  - **Cold mode on a chase is only interpretable when the trial completes many laps.** At
+    8 MiB, `--cold clflush` is **6.62x** warm, because a cold lap costs 16 ms of a 30 ms
+    trial - it measures cold-miss latency, not L3-from-cold. At 256 KiB the ratio is 1.00x.
+  - **Verify 3's CoV contradicts M3.3's stated hypothesis.** At 1 MiB over 200 trials,
+    `--cold clflush` gives CoV **33.97 %** against warm's **8.59 %**: cold made repeatability
+    *worse*. MAD/median is 5.2 % and 4 trials of 200 exceed 2x the median, so it is a heavy
+    tail from the flush's own work, not a wider spread. Preliminary (200 trials, not >= 1000);
+    recorded for M3.3 rather than smoothed over.
+  - **Two mistakes that would have produced plausible wrong numbers**, both now tested:
+    Sattolo vs Fisher-Yates (measured: 0 of 200 Fisher-Yates shuffles of 4096 elements are a
+    single cycle, mean 8.8 cycles), and summing loads across threads - which would report
+    latency divided by N, a latency that improves as you add threads.
+  - **A deviation from PLAN.md: the batch is 64 Ki loads, not 1 Mi.** At ~160 ns per DRAM
+    load a 1 Mi batch takes 160 ms, more than 3x a 50 ms trial, and the trial loop can only
+    overshoot a batch, never cut it short.
+  - **An observed `system_clock` jump.** One run reported a 5 min 47 s envelope span for
+    1.7 s of work and the next run's timestamps were earlier. `started_at`/`finished_at` are
+    metadata; `duration_ns` (steady_clock) was correct throughout. This is the project's
+    "steady_clock only" rule justifying itself in the wild.
+  - 3 additive `params` keys (`thp_policy`, `buffer_huge_page_bytes`, `buffer_huge_pages`)
+    plus `alloc_buffer` now measuring the huge-page grant for every large buffer rather than
+    only requested ones. 17 new tests; 152/152 in release, debug, ci, asan and tsan (one
+    unidentified asan flake recorded in `ctest_presets.log`); all 15 run files pass
+    `bench validate` and `check-jsonschema`.
 
 ### M3.3 Variance for memory metrics
 **Build**

@@ -127,6 +127,19 @@ std::uint64_t evict_llc(std::span<std::byte> scratch) noexcept {
     return stream_read(scratch);
 }
 
+std::string thp_policy() {
+    // The file lists every policy with the active one in brackets: "always [madvise] never".
+    std::ifstream in{"/sys/kernel/mm/transparent_hugepage/enabled"};
+    std::string line;
+    if (!in || !std::getline(in, line))
+        return "unknown";
+    const auto lo = line.find('[');
+    const auto hi = line.find(']', lo == std::string::npos ? 0 : lo);
+    if (lo == std::string::npos || hi == std::string::npos || hi <= lo + 1)
+        return "unknown";
+    return line.substr(lo + 1, hi - lo - 1);
+}
+
 std::uint64_t smaps_anon_huge_bytes(const void* addr) noexcept {
     const auto target = reinterpret_cast<std::uintptr_t>(addr);
     std::ifstream in{"/proc/self/smaps"};
@@ -241,7 +254,11 @@ Buffer alloc_buffer(std::size_t bytes, const AllocOptions& opts) {
     if (opts.first_touch && buf.mapped_ > 0)
         for (std::size_t off = 0; off < bytes; off += 4096)
             buf.data_[off] = std::byte{0};
-    if (buf.huge_requested_)
+    // Measured for every large buffer, not only the ones that asked. Under a THP policy of
+    // "always" the kernel backs a big mapping with huge pages whether or not it was advised
+    // to, so params.huge_pages would otherwise read false on a run whose pages are huge -
+    // which is exactly the claim a --no-hugepages comparison rests on.
+    if (buf.huge_requested_ || bytes >= kHugePage)
         buf.huge_granted_ = smaps_anon_huge_bytes(buf.data_);
     return buf;
 }

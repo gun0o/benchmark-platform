@@ -1,0 +1,39 @@
+=== uptime before ===
+ 11:47:07 up 10:18,  2 users,  load average: 0.87, 0.81, 1.11
+=== free before ===
+               total        used        free      shared  buff/cache   available
+Mem:           15794        2600        9712           5        3481       12946
+Swap:           4096           0        4096
+=== THP policy ===
+always [madvise] never
+2026-09-21T11:47:07-05:00  before sweep rep 1  power=Online battery=100% mode=Best performance
++ bench run -w mem_latency --working-set 4K,16K,32K,48K,64K,128K,512K,1M,2M,4M,8M,16M,24M,32M,64M,256M,1G --trials 10 --trial-ms 30 --warmup 5 --warmup-ms 200 --spin-ms 300 --cold none -o sweep_rep1.json
+2026-09-21T11:47:18-05:00  after sweep rep 1  power=Online battery=100% mode=Best performance
+2026-09-21T11:47:18-05:00  before sweep rep 2  power=Online battery=100% mode=Best performance
++ bench run -w mem_latency --working-set 4K,16K,32K,48K,64K,128K,512K,1M,2M,4M,8M,16M,24M,32M,64M,256M,1G --trials 10 --trial-ms 30 --warmup 5 --warmup-ms 200 --spin-ms 300 --cold none -o sweep_rep2.json
+2026-09-21T11:47:29-05:00  after sweep rep 2  power=Online battery=100% mode=Best performance
+2026-09-21T11:47:29-05:00  before sweep rep 3  power=Online battery=100% mode=Best performance
++ bench run -w mem_latency --working-set 4K,16K,32K,48K,64K,128K,512K,1M,2M,4M,8M,16M,24M,32M,64M,256M,1G --trials 10 --trial-ms 30 --warmup 5 --warmup-ms 200 --spin-ms 300 --cold none -o sweep_rep3.json
+2026-09-21T11:47:40-05:00  after sweep rep 3  power=Online battery=100% mode=Best performance
+2026-09-21T11:47:40-05:00  before sweep rep 4  power=Online battery=100% mode=Best performance
++ bench run -w mem_latency --working-set 4K,16K,32K,48K,64K,128K,512K,1M,2M,4M,8M,16M,24M,32M,64M,256M,1G --trials 10 --trial-ms 30 --warmup 5 --warmup-ms 200 --spin-ms 300 --cold none -o sweep_rep4.json
+2026-09-21T11:47:50-05:00  after sweep rep 4  power=Online battery=100% mode=Best performance
+2026-09-21T11:47:51-05:00  before sweep rep 5  power=Online battery=100% mode=Best performance
++ bench run -w mem_latency --working-set 4K,16K,32K,48K,64K,128K,512K,1M,2M,4M,8M,16M,24M,32M,64M,256M,1G --trials 10 --trial-ms 30 --warmup 5 --warmup-ms 200 --spin-ms 300 --cold none -o sweep_rep5.json
+2026-09-21T11:48:01-05:00  after sweep rep 5  power=Online battery=100% mode=Best performance
+2026-09-21T11:48:02-05:00  before nohuge rep 1  power=Online battery=100% mode=Best performance
+2026-09-21T11:48:09-05:00  after nohuge rep 1  power=Online battery=100% mode=Best performance
+2026-09-21T11:48:09-05:00  before nohuge rep 2  power=Online battery=100% mode=Best performance
+2026-09-21T11:48:17-05:00  after nohuge rep 2  power=Online battery=100% mode=Best performance
+2026-09-21T11:48:17-05:00  before nohuge rep 3  power=Online battery=100% mode=Best performance
+2026-09-21T11:48:24-05:00  after nohuge rep 3  power=Online battery=100% mode=Best performance
+2026-09-21T11:48:25-05:00  before cov_1m  power=Online battery=100% mode=Best performance
+2026-09-21T11:48:48-05:00  after cov_1m  power=Online battery=100% mode=Best performance
+2026-09-21T11:48:49-05:00  before cold_vs_warm  power=Online battery=100% mode=Best performance
+2026-09-21T11:48:54-05:00  after cold_vs_warm  power=Online battery=100% mode=Best performance
+=== uptime after ===
+ 11:48:54 up 10:20,  2 users,  load average: 1.17, 0.94, 1.12
+=== free after ===
+               total        used        free      shared  buff/cache   available
+Mem:           15794        2708        9601           5        3484       12838
+Swap:           4096           0        4096

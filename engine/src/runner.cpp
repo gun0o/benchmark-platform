@@ -9,6 +9,7 @@
 #include "bench/workloads/cpu_hash.hpp"
 #include "bench/workloads/cpu_int.hpp"
 #include "bench/workloads/mem_bw.hpp"
+#include "bench/workloads/mem_latency.hpp"
 
 #include <algorithm>
 #include <cerrno>
@@ -43,7 +44,7 @@ const std::vector<WorkloadDesc>& workload_registry() {
         {Workload::mem_latency,
          {Metric::mem_latency},
          "dependent-load pointer chase (Sattolo cycle)",
-         false},
+         true},
         {Workload::disk_seq,
          {Metric::disk_seq_read_bw, Metric::disk_seq_write_bw},
          "1 MiB O_DIRECT sequential read / write",
@@ -102,6 +103,8 @@ std::uint64_t default_working_set(Workload w) noexcept {
     switch (w) {
     case Workload::mem_bw:
         return MemBwWorkload::kDefaultWorkingSet;
+    case Workload::mem_latency:
+        return MemLatencyWorkload::kDefaultWorkingSet;
     default:
         return 0;
     }
@@ -111,6 +114,8 @@ std::uint64_t effective_working_set(Workload w, std::uint64_t requested) noexcep
     switch (w) {
     case Workload::mem_bw:
         return MemBwWorkload::buffer_bytes_for(requested);
+    case Workload::mem_latency:
+        return MemLatencyWorkload::buffer_bytes_for(requested);
     default:
         // cpu_* keep whatever was asked for; see the note in workload.hpp.
         return requested;
@@ -615,7 +620,7 @@ public:
             r.metric = m;
             r.value = value_rule_of(m) == ValueRule::latency_p99_us
                           ? lat.p99_us
-                          : value_from_units(m, total_ops, ns);
+                          : value_from_units(m, total_ops, ns, n_threads_);
             r.trial = warmup ? -warmups_done_ : timed_done_ - 1; // negative while warming up
             r.timestamp = stamp;
             r.duration_ns = ns == 0 ? 1 : ns;
@@ -819,8 +824,10 @@ RunEnvelope run_benchmarks(const RunConfig& cfg, const MachineInfo& machine,
             return build.template operator()<CpuFpWorkload>();
         case Workload::cpu_hash:
             return build.template operator()<CpuHashWorkload>();
-        default:
+        case Workload::mem_bw:
             return build.template operator()<MemBwWorkload>();
+        default:
+            return build.template operator()<MemLatencyWorkload>();
         }
     };
 

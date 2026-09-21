@@ -200,8 +200,9 @@ ValueRule value_rule_of(Metric m) noexcept {
     return ValueRule::units_per_s;
 }
 
-double value_from_units(Metric m, std::uint64_t units, std::uint64_t elapsed_ns) noexcept {
-    if (units == 0 || elapsed_ns == 0)
+double value_from_units(Metric m, std::uint64_t units, std::uint64_t elapsed_ns,
+                        int threads) noexcept {
+    if (units == 0 || elapsed_ns == 0 || threads < 1)
         return 0.0;
     const double u = static_cast<double>(units);
     const double ns = static_cast<double>(elapsed_ns);
@@ -213,7 +214,8 @@ double value_from_units(Metric m, std::uint64_t units, std::uint64_t elapsed_ns)
     case ValueRule::mega_units_per_s:
         return u / ns * 1e3; // ...and MB/s with 1 MB = 1e6 bytes
     case ValueRule::ns_per_unit:
-        return ns / u;
+        // Per thread; see the header.
+        return ns / (u / static_cast<double>(threads));
     case ValueRule::latency_p99_us:
         break; // not a function of the unit count; the runner reads it from the histogram
     }

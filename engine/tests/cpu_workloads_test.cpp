@@ -30,9 +30,10 @@ TEST(CpuWorkloads, AllThreeAreRegisteredAsImplemented) {
     EXPECT_TRUE(ready.contains(Workload::cpu_fp));
     EXPECT_TRUE(ready.contains(Workload::cpu_hash));
     // --all must not try to run an unbuilt workload: everything the registry calls ready
-    // has to have a session the runner can build. mem_bw joined in M3.1.
+    // has to have a session the runner can build. mem_bw joined in M3.1, mem_latency in M3.2.
     EXPECT_TRUE(ready.contains(Workload::mem_bw));
-    EXPECT_EQ(ready.size(), 4u);
+    EXPECT_TRUE(ready.contains(Workload::mem_latency));
+    EXPECT_EQ(ready.size(), 5u);
 }
 
 // ---- op accounting ----------------------------------------------------------------------

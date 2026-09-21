@@ -6,8 +6,9 @@ file records the measurement procedure behind it, the caveats that come with it,
 places where a number is easy to misread.
 
 It gains a section as each milestone lands. Sections present so far: **memory bandwidth**
-(M3.1). The milestone notes in `docs/notes/` carry the full derivation and the measurements
-behind each claim; this file is the short version a reader needs before quoting a number.
+(M3.1), **cache latency** (M3.2). The milestone notes in `docs/notes/` carry the full
+derivation and the measurements behind each claim; this file is the short version a reader
+needs before quoting a number.
 
 Everything here was measured on the machine described in `docs/results/README.md`: an Intel
 Core Ultra 9 185H laptop (48 KiB L1d, 2 MiB L2 per core, 24 MiB L3, 16 GB) running Ubuntu
@@ -156,3 +157,107 @@ A configuration using all 22 vCPUs leaves none for the coordinating thread or th
 arriving more than 1 ms late off the start barrier in **100 %** of trials. That row is
 published with its `late_trials` count rather than dropped, but it is not a fact about
 memory bandwidth.
+
+---
+
+## Cache latency — `mem_latency` (M3.2)
+
+Full derivation and the measurements behind every claim: `docs/notes/M3.2.md`. Raw runs:
+`docs/results/m3.2/`.
+
+### Procedure
+
+Each worker owns a private buffer of `working_set_bytes` seen as an array of 64-byte lines.
+A random **cyclic** permutation of the lines is built with **Sattolo's algorithm**, and each
+line's first 8 bytes hold the index of the next line. The kernel is `idx = words[idx]`,
+repeated: one op is one dependent load, and `value = elapsed ÷ loads`.
+
+Sattolo, not Fisher–Yates, and the distinction is the whole measurement. Fisher–Yates
+produces a uniformly random permutation, which decomposes into about ln(n) disjoint cycles
+(measured: 8.8 on average for 4096 lines). A chase started anywhere would fall into one
+cycle and stay there, so a "256 KiB working set" could report the latency of whatever cache
+a 30 KiB subset fits in. Sattolo produces a uniformly random *cyclic* permutation, so the
+chase visits every line exactly once per lap by construction.
+
+A batch is 65536 loads. That is smaller than PLAN.md's 1 Mi: the trial loop can only
+overshoot a trial's budget, never cut a batch short, and at ~160 ns per DRAM load a 1 Mi
+batch would take 160 ms against a 50 ms trial.
+
+Buffers of at least 2 MiB request transparent huge pages. Whether the kernel granted them is
+**measured**, per buffer, and reported as `params.buffer_huge_page_bytes`; the active THP
+policy is reported as `params.thp_policy`. Both matter, because a large chase over 4 KiB
+pages is partly a TLB benchmark.
+
+### A latency is per thread
+
+`--threads N` measures **loaded latency**: the time one dependent load takes while N threads
+are hitting the memory system. The value divides wall time by the loads **one** thread
+performed, not by the sum across threads. Summing would report latency ÷ N — a figure that
+improves as you add threads, which is the opposite of what loaded latency does. Rates are
+summed across threads; latencies are not.
+
+### Reading the sweep on this machine
+
+| working set | ns/load | note |
+|---|---:|---|
+| 4 KiB – 48 KiB | 1.02 – 1.10 | L1d (48 KiB). 1.02 ns is 4.9 cycles at the measured 4.83 GHz. |
+| 64 KiB – 2 MiB | 3.25 – 6.07 | L2 (2 MiB per core); rises towards capacity rather than being flat |
+| 4 – 24 MiB | 15.3 – 146 | **no L3 plateau**; see below |
+| 32 MiB – 1 GiB | 155 – 176 | DRAM |
+
+Three caveats carry with any of these numbers:
+
+- **There is no usable L3 figure for this machine.** Between 4 MiB and 24 MiB — all of it
+  inside a 24 MiB L3 — latency climbs by a factor of ten with no flat region. The 8 MiB
+  point is **bimodal**: eight separate runs gave 17.0, 17.2, 18.6, 19.3, 29.0, 35.9, 107.5,
+  129.9 ns, two clusters rather than one spread. The same vCPU produced both, so it is not
+  the vCPU. Under WSL2 the guest cannot pin a thread to a physical core, and on a hybrid
+  part the core types do not share a path to the last-level cache. What is measurable here
+  is the distribution, not a latency.
+- **DRAM latency keeps rising after the caches are exhausted**, from 146 ns at 24 MiB to
+  176 ns at 1 GiB. This is not the TLB: every point from 2 MiB up got 100 % of its buffer in
+  huge pages, and 1 GiB is 512 huge pages. It is DRAM row and bank locality — a random
+  pattern over a wider address span hits an open row less often.
+- **PLAN.md expected 90–110 ns for DRAM; the measured figure is 146–176 ns.** These are the
+  most repeatable points in the sweep (pass-to-pass spread 1.0×), so the gap is not noise.
+  M2.3's 105 ns came from a flushed 256 KiB chase, which is an easier case than a
+  steady-state chase over a large working set, and its run-to-run range was 49–217 ns.
+
+### `--no-hugepages` costs 7–12 % at large working sets
+
+Measured over three alternating pairs: +7 % at 64 MiB, +12 % at 256 MiB, +10 % at 1 GiB.
+Real and consistent in sign, smaller than one might expect — a page walk is four memory
+accesses that are themselves cached, so against a ~195 ns DRAM access it is a tax rather
+than a doubling.
+
+### `--cold` on a chase is only interpretable when the trial completes many laps
+
+Unlike a bandwidth kernel, where the cold cache state is a transient in the first of
+thousands of passes, a chase can spend an entire trial on its first lap.
+
+| working set | warm | `--cold clflush` | ratio |
+|---|---:|---:|---:|
+| 256 KiB | 3.28 | 3.27 | 1.00× |
+| 1 MiB | 4.42 | 4.69 | 1.06× |
+| 8 MiB | 17.79 | 117.88 | **6.62×** |
+| 64 MiB | 156.42 | 156.29 | 1.00× (`params.cold` = `n/a`) |
+
+At 8 MiB the chase has 131072 lines and a cold lap costs about 16 ms of a 30 ms trial, so
+`--cold clflush` there does not measure "L3 latency from a cold start" — it measures
+cold-miss latency. Above L3 the engine records `params.cold = "n/a"` and does not flush at
+all, so warm and cold agree to 0.1 %.
+
+**Preliminary variance note**, not a Target #2 measurement (200 trials, not ≥ 1000; the full
+study is M3.3): at a 1 MiB working set, `--cold clflush` gives CoV **33.97 %** against warm's
+**8.59 %** — cold mode made repeatability *worse*, not better as PLAN.md's M3.3 hypothesis
+expects. The distribution says why: MAD/median is 5.2 %, and 4 trials of 200 are over twice
+the median. It is a heavy tail from the flush's own work and the cold first lap, not a wider
+spread.
+
+### Envelope timestamps are not measurements
+
+`started_at` and `finished_at` come from `system_clock`, which WSL2 resynchronizes against
+the Windows host and which can jump in either direction. One run during M3.2 reported a
+5 minute 47 second span for 1.7 seconds of work, and the next run's timestamps were earlier
+than that "finish". Every measurement uses `steady_clock`; `duration_ns` per trial is the
+figure to trust. Do not compute a throughput from `finished_at − started_at`.

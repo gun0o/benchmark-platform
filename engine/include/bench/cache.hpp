@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace bench {
@@ -59,6 +60,13 @@ std::uint64_t evict_llc(std::span<std::byte> scratch) noexcept;
 // Per-thread eviction buffer size for a machine with `l3_kb` of last-level cache: 2 x L3,
 // floored at 2 MiB for machines that do not report an L3.
 std::size_t evict_buffer_bytes(int l3_kb) noexcept;
+
+// The kernel's transparent-huge-page policy, read from
+// /sys/kernel/mm/transparent_hugepage/enabled: "always", "madvise", "never", or "unknown".
+// Recorded in params because MADV_HUGEPAGE does nothing under "never" and is redundant
+// under "always" - the same --no-hugepages comparison means three different things under
+// the three policies.
+std::string thp_policy();
 
 // AnonHugePages, in bytes, of the /proc/self/smaps mapping containing `addr`. 0 when the
 // mapping has no transparent huge pages or smaps is unreadable. Per-mapping rather than
