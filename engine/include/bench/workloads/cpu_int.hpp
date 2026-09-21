@@ -20,6 +20,10 @@ public:
     std::uint64_t run_batch();
     void teardown() noexcept {}
 
+    // Fixed at compile time for the CPU kernels; the runner asks for it through this
+    // accessor because a memory or disk batch is only sized once setup() has run.
+    [[nodiscard]] std::uint64_t batch_units() const noexcept { return kBatchOps; }
+
     // cpu_int has no input buffer: its whole working set is the 8 lanes, the multiplier and
     // the sink, which live in this object. Flushing it makes every trial reload that state
     // from memory, so no trial inherits a warm copy from the one before. It is 80 bytes

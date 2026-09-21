@@ -1,0 +1,14 @@
+=== glibc ===
+ldd (Ubuntu GLIBC 2.35-0ubuntu3.15) 2.35
+=== default threshold (getconf L3) ===
+25165824
+=== tunable as seen by the loader ===
+(ld.so --list-tunables unavailable)
+--- memcpy NT threshold: default ---
+METRIC        THR         WS       MEDIAN         MEAN     CoV% MAD/MED%
+mem_copy_bw     1    8388608        35.49        35.19     3.45     2.27
+mem_copy_bw     1  268435456        21.31         21.4     1.08     0.67
+--- memcpy NT threshold: forced ---
+METRIC        THR         WS       MEDIAN         MEAN     CoV% MAD/MED%
+mem_copy_bw     1    8388608        36.48        36.52     2.19     0.74
+mem_copy_bw     1  268435456        18.71        18.41     6.05     0.57

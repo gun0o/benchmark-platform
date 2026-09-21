@@ -632,6 +632,41 @@ browser with zero manual steps beyond `make up` and `make bench`.
 - Small working sets at 50 ms trials mean millions of passes; batch = one full pass.
 - Page faults on first touch would dominate if buffers were allocated in the timed region;
   they are not (M2.1 rule).
+- Done 2026-09-21 (write-up: `docs/notes/M3.1.md`, runs: `docs/results/m3.1/`, reader-facing
+  caveats: `docs/methodology.md`). Measured plugged in, Windows plan Balanced, power mode
+  **Best performance**, containers stopped; power state recorded before and after every run.
+  All four Verify bullets pass. Findings and deviations, all measured:
+  - **The sweep's plateaus land where the cache sizes say they should**, but the L1->L2 step
+    is the *smallest* (1.3x) and L2->L3 the largest (2.5x): a streaming, fully prefetchable
+    read is close to the best case for this part's wide L2. Read is 11x faster from L1
+    (253.7 GB/s) than from DRAM (22.9). 16 MiB of a 24 MiB L3 runs at 45 GB/s with the
+    sweep's worst CoV - "partly L3", because L3 is shared with the host too.
+  - **Write-allocate is the clearest measurement here.** At the 48 KiB L1d boundary write
+    bandwidth falls **290.9 -> 80.6 GB/s (3.6x)** where read falls 1.3x. The mechanism is
+    confirmed; the "write ~ 1/2 read" arithmetic is not - measured **0.61-0.63**, because
+    the read baseline at low thread counts is the core's outstanding-miss concurrency limit,
+    not a bandwidth ceiling. `--nt` closes the ratio to **0.90 at 8 threads** as predicted,
+    but reaches **1.88 at 1 thread** (43.5 GB/s of NT writes against 23.1 GB/s of reads).
+  - **`mem_copy_bw` without `--nt` is not a plain-store baseline.** glibc's `memcpy` already
+    switches to non-temporal stores above `glibc.cpu.x86_non_temporal_threshold` (= L3 here).
+    Tested, not assumed: forcing the tunable above the working set costs the 256 MiB copy
+    **-12.2 %** and leaves the 8 MiB copy unchanged (+2.8 %, noise). Recorded in
+    `docs/methodology.md` so the copy and write columns are never compared naively.
+  - **Thread-sweep knee at 11-16 threads, 84.2 GB/s**; 22 threads *regresses* to 64.0 GB/s
+    with a late worker in **100 %** of trials (no vCPU left for the coordinator), published
+    with its `late_trials` count rather than dropped.
+  - **The runner stopped assuming a workload has one metric, that a work unit is an "op",
+    and that a value is a rate.** Configurations are now per metric; `params.unit_of_work`
+    says what `ops` counts; `ValueRule` distinguishes rates, reciprocals and values that do
+    not come from the unit count at all (the p99 M4.1 needs). "Rider" metrics that are a
+    second reading of the same trial ride along in one session.
+  - **A repeated pass would have been optimized away.** A 4 KiB batch is 1024 passes over an
+    unmodified buffer, which the compiler may legally run once and reuse - a bandwidth
+    number 1024x too high with nothing looking wrong. Each pass ends with a `ClobberMemory()`
+    that emits no instructions.
+  - 8 additive `params` keys, schema first; no `schema_version` bump. 27 new tests; 137/137
+    in release, debug, ci, asan and tsan; all 8 run files pass `bench validate` and
+    `check-jsonschema`. `docs/methodology.md` started (M3.1's Verify asks for it).
 
 ### M3.2 Latency (`mem_latency`)
 **Build**

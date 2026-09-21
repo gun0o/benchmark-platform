@@ -3,6 +3,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <optional>
 #include <string_view>
 
@@ -56,5 +57,36 @@ Workload workload_of(Metric m) noexcept;
 
 // True when lower values are better (latencies).
 bool lower_is_better(Metric m) noexcept;
+
+// What one unit counted by a workload's run_batch() *is*, for this metric. The runner sums
+// these across threads and the trial's value follows from the sum and the trial's wall
+// time; recording the unit next to the count is what keeps `ops: 12345678` from meaning
+// three different things in three different rows.
+enum class WorkUnit {
+    ops,   // one operation as the metric's definition in CLAUDE.md spells it out
+    bytes, // bytes moved (read, written, or copied once for a copy)
+    loads, // dependent loads in a pointer chase
+    ios,   // completed I/O system calls
+};
+
+std::string_view to_string(WorkUnit u) noexcept;
+WorkUnit work_unit_of(Metric m) noexcept;
+
+// How a trial's value is formed. Four of the five are a rate or its reciprocal over the
+// unit count; the fifth is not a function of the unit count at all, which is the reason
+// this is an enum and not a scale factor.
+enum class ValueRule {
+    units_per_s,      // ops/s, IOPS
+    giga_units_per_s, // GB/s: units are bytes, 1 GB = 1e9 bytes
+    mega_units_per_s, // MB/s: units are bytes, 1 MB = 1e6 bytes
+    ns_per_unit,      // ns per dependent load
+    latency_p99_us,   // from the trial's per-call latency histogram, not the unit count
+};
+
+ValueRule value_rule_of(Metric m) noexcept;
+
+// value for every rule except latency_p99_us, which the runner computes from the histogram.
+// elapsed_ns == 0 or units == 0 yields 0 rather than an infinity: a result must be finite.
+double value_from_units(Metric m, std::uint64_t units, std::uint64_t elapsed_ns) noexcept;
 
 } // namespace bench

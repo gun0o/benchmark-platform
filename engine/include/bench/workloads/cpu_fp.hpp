@@ -28,6 +28,10 @@ public:
     std::uint64_t run_batch();
     void teardown() noexcept {}
 
+    // Fixed at compile time for the CPU kernels; the runner asks for it through this
+    // accessor because a memory or disk batch is only sized once setup() has run.
+    [[nodiscard]] std::uint64_t batch_units() const noexcept { return kBatchOps; }
+
     // Same reasoning as cpu_int: the working set is this object's own lane state, so the
     // cold mode flushes it and every trial reloads it from memory. 256 bytes (three
     // 64-byte-aligned lane arrays plus the sink), so the cost is nil by construction.

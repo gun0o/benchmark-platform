@@ -12,6 +12,7 @@
 #include "bench/cache.hpp"
 #include "bench/metric.hpp"
 #include "bench/result.hpp"
+#include "bench/workload.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -22,7 +23,13 @@
 namespace bench {
 
 struct RunConfig {
+    // What to measure. `metrics` is what the runner actually walks: one configuration per
+    // metric, because mem_bw's read, write and copy (and the disk workloads' reads and
+    // writes) are separate measurements that share a class, not one measurement with three
+    // answers. `workloads` is the convenient shorthand - run_benchmarks expands it into
+    // every metric the workload owns when `metrics` is left empty.
     std::vector<Workload> workloads;
+    std::vector<Metric> metrics;
     std::vector<int> thread_counts{1};
     std::vector<std::uint64_t> working_sets{0};
     int trials = 1;         // timed trials emitted per configuration
@@ -43,6 +50,7 @@ struct RunConfig {
     // How many times a configuration may be thrown away and re-run when the clock
     // self-test says the host was contended (M1.2's canary). Sequential runs only.
     int canary_retries = 3;
+    WorkloadOptions opts; // knobs owned by the workloads themselves (--nt, --disk-path, ...)
     bool verbose = false;
 };
 

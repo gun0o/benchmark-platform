@@ -103,11 +103,14 @@ int main(int argc, char** argv) {
     });
 
     // ---- run -----------------------------------------------------------------------
-    std::string workloads_csv, threads_csv = "1", ws_csv = "0", out_path;
+    std::string workloads_csv, metrics_csv, threads_csv = "1", ws_csv = "0", out_path;
     bool all = false, run_pretty = false, verbose = false;
     bench::RunConfig cfg;
     auto* run = app.add_subcommand("run", "Run benchmarks and emit a run envelope");
     run->add_option("-w,--workload", workloads_csv, "Comma-separated workloads (see `bench list`)");
+    run->add_option("-m,--metric", metrics_csv,
+                    "Comma-separated metrics, e.g. mem_read_bw. Narrower than --workload, "
+                    "which runs every metric its workload owns");
     run->add_flag("--all", all, "Run every implemented workload");
     run->add_option("-t,--threads", threads_csv, "Comma-separated thread counts (default 1)");
     run->add_option("--working-set", ws_csv,
@@ -148,6 +151,11 @@ int main(int argc, char** argv) {
                     "self-test shows host contention (0 = never; sequential runs only)")
         ->default_val(3)
         ->check(CLI::NonNegativeNumber);
+    // Workload-owned knobs.
+    run->add_flag("--nt", cfg.opts.non_temporal,
+                  "mem_bw write/copy use non-temporal (streaming) stores");
+    run->add_flag("!--no-hugepages", cfg.opts.huge_pages,
+                  "Do not ask for transparent huge pages for large buffers");
     std::string cpus_csv;
     bool pin = false;
     run->add_flag("--pin", pin,
@@ -166,10 +174,26 @@ int main(int argc, char** argv) {
             const auto w = bench::parse_workload(name);
             if (!w)
                 throw CLI::ValidationError("--workload", "unknown workload: " + name);
+            if (!bench::is_implemented(*w))
+                throw CLI::ValidationError("--workload", "not implemented yet: " + name);
             cfg.workloads.push_back(*w);
         }
-        if (cfg.workloads.empty())
-            throw CLI::ValidationError("--workload", "no workloads selected (or --all)");
+        for (const auto& name : split_csv(metrics_csv)) {
+            const auto m = bench::parse_metric(name);
+            if (!m)
+                throw CLI::ValidationError("--metric", "unknown metric: " + name);
+            if (!bench::is_implemented(bench::workload_of(*m)))
+                throw CLI::ValidationError("--metric", "not implemented yet: " + name);
+            // A rider is emitted alongside the metric whose trials it summarizes, so asking
+            // for it on its own would silently run something else. Say so instead.
+            if (bench::is_rider(*m))
+                throw CLI::ValidationError(
+                    "--metric", name + " is reported alongside the metric whose trials it "
+                                       "summarizes; select that one instead");
+            cfg.metrics.push_back(*m);
+        }
+        if (cfg.workloads.empty() && cfg.metrics.empty())
+            throw CLI::ValidationError("--workload", "no workloads selected (or --all/--metric)");
         cfg.thread_counts.clear();
         for (const auto& t : split_csv(threads_csv))
             cfg.thread_counts.push_back(std::stoi(t));

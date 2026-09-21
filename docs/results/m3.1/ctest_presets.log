@@ -1,0 +1,32 @@
+# M3.1 - all five presets, after the runner generalization and mem_bw.
+# 2026-09-21T11:37:23-05:00
+
+### ctest --preset release
+100% tests passed, 0 tests failed out of 137
+Label Time Summary:
+perf    =  12.87 sec*proc (14 tests)
+Total Test time (real) =  18.56 sec
+
+### ctest --preset debug
+100% tests passed, 0 tests failed out of 137
+Label Time Summary:
+perf    =  11.05 sec*proc (14 tests)
+Total Test time (real) =  17.24 sec
+
+### ctest --preset ci
+100% tests passed, 0 tests failed out of 137
+Label Time Summary:
+perf    =  12.87 sec*proc (14 tests)
+Total Test time (real) =  18.58 sec
+
+### ctest --preset asan
+100% tests passed, 0 tests failed out of 137
+Label Time Summary:
+perf    =   7.62 sec*proc (14 tests)
+Total Test time (real) =  17.98 sec
+
+### ctest --preset tsan
+100% tests passed, 0 tests failed out of 137
+Label Time Summary:
+perf    =   9.32 sec*proc (14 tests)
+Total Test time (real) =  17.63 sec

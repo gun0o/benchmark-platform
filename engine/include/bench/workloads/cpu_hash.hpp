@@ -97,6 +97,10 @@ public:
     std::uint64_t run_batch();
     void teardown() noexcept {}
 
+    // Fixed at compile time for the CPU kernels; the runner asks for it through this
+    // accessor because a memory or disk batch is only sized once setup() has run.
+    [[nodiscard]] std::uint64_t batch_units() const noexcept { return kBatchOps; }
+
     // Unlike cpu_int/cpu_fp this workload has a real input buffer, so that is what gets
     // cooled: every trial starts having to pull the 4 KiB back into L1.
     [[nodiscard]] std::span<const std::byte> cold_region() const { return buf_.span(); }

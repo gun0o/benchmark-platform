@@ -8,6 +8,7 @@
 #include "bench/workloads/cpu_fp.hpp"
 #include "bench/workloads/cpu_hash.hpp"
 #include "bench/workloads/cpu_int.hpp"
+#include "bench/workloads/mem_bw.hpp"
 
 #include <algorithm>
 #include <cerrno>
@@ -38,7 +39,7 @@ const std::vector<WorkloadDesc>& workload_registry() {
         {Workload::mem_bw,
          {Metric::mem_read_bw, Metric::mem_write_bw, Metric::mem_copy_bw},
          "streaming read / write / copy over a per-thread buffer",
-         false},
+         true},
         {Workload::mem_latency,
          {Metric::mem_latency},
          "dependent-load pointer chase (Sattolo cycle)",
@@ -64,6 +65,58 @@ std::vector<int> default_cpu_list(int logical_cpus) {
     return cpus;
 }
 
+bool is_implemented(Workload w) noexcept {
+    for (const auto& d : workload_registry())
+        if (d.kind == w)
+            return d.implemented;
+    return false;
+}
+
+// Metrics that are a second reading of another metric's trial rather than a measurement of
+// their own. disk_rand_read_p99_us is the 99th percentile of exactly the reads that
+// disk_rand_read_iops counted, so running it separately would measure a different second's
+// worth of I/O and cost twice the time for a worse answer.
+bool is_rider(Metric m) noexcept {
+    return m == Metric::disk_rand_read_p99_us;
+}
+
+std::vector<Metric> riders_of(Metric m) noexcept {
+    if (m == Metric::disk_rand_read_iops)
+        return {Metric::disk_rand_read_p99_us};
+    return {};
+}
+
+// The metrics a `--workload X` shorthand expands to: everything the registry lists for it,
+// minus the riders, which their host metric brings along.
+std::vector<Metric> metrics_of(Workload w) {
+    std::vector<Metric> out;
+    for (const auto& d : workload_registry())
+        if (d.kind == w)
+            for (Metric m : d.metrics)
+                if (!is_rider(m))
+                    out.push_back(m);
+    return out;
+}
+
+std::uint64_t default_working_set(Workload w) noexcept {
+    switch (w) {
+    case Workload::mem_bw:
+        return MemBwWorkload::kDefaultWorkingSet;
+    default:
+        return 0;
+    }
+}
+
+std::uint64_t effective_working_set(Workload w, std::uint64_t requested) noexcept {
+    switch (w) {
+    case Workload::mem_bw:
+        return MemBwWorkload::buffer_bytes_for(requested);
+    default:
+        // cpu_* keep whatever was asked for; see the note in workload.hpp.
+        return requested;
+    }
+}
+
 namespace {
 
 std::atomic<bool> g_abort{false};
@@ -72,11 +125,18 @@ std::atomic<bool> g_abort{false};
 // adjacent-line prefetch pair). Only the owning worker writes it during a trial; the main
 // thread reads it after the end barrier.
 struct alignas(128) Slot {
-    std::uint64_t ops = 0;
+    std::uint64_t ops = 0; // work units, in whatever WorkUnit this metric counts
     std::uint64_t batches = 0;
     std::uint64_t cold_ns = 0; // cost of the previous trial's cold prep, published after release
+    std::uint64_t pre_ns = 0;  // ...and of the workload's own before_trial() hook
     Clock::time_point start{};
     Clock::time_point end{};
+    // Per-call latency histogram, for metrics whose value is a percentile over individual
+    // operations rather than a rate. The workload owns the storage; the worker publishes a
+    // view of it once, and how much of it this trial used after every timed region, so the
+    // main thread merges a few hundred buckets instead of a million.
+    const std::uint32_t* hist = nullptr;
+    std::uint32_t hist_used = 0;
     int cpu_start = -1; // sched_getcpu() right after the start barrier releases
     int cpu_end = -1;   // sched_getcpu() right after the timed region
     int assigned_cpu = -1;
@@ -94,11 +154,16 @@ struct WorkerFailure {
     std::string message;
 };
 
-// What cold preparation turned out to be for this configuration, published by worker 0.
-struct ColdReport {
+// What setup turned out to mean for this configuration, published by worker 0 for the main
+// thread to put in params: every worker computes the same answers from the same inputs, but
+// only a worker can compute them at all, because they depend on its own buffers.
+struct WorkerReport {
     std::atomic<ColdEffect> effect{ColdEffect::none};
     std::atomic<std::size_t> bytes{0};
     std::atomic<std::uint64_t> huge_bytes{0};
+    std::atomic<std::uint64_t> batch_units{0};
+    std::mutex mu;
+    json extra = json::object(); // the workload's own describe(), if it has one
 };
 
 // Between trials a worker either spins at the start barrier or parks here.
@@ -136,9 +201,9 @@ int pin_current_thread(int cpu) noexcept {
 }
 
 template <WorkloadImpl W>
-void worker(std::stop_token st, int index, const RunConfig& cfg, std::uint64_t working_set,
+void worker(std::stop_token st, int index, const RunConfig& cfg, const WorkloadContext& base_ctx,
             int l3_kb, SpinBarrier& start_b, SpinBarrier& end_b, std::latch& ready, Slot& slot,
-            WorkerFailure& failure, ColdReport& report, const Gate* gate) {
+            WorkerFailure& failure, WorkerReport& report, const Gate* gate) {
     if (slot.assigned_cpu >= 0)
         slot.pin_errno = pin_current_thread(slot.assigned_cpu);
 
@@ -148,19 +213,26 @@ void worker(std::stop_token st, int index, const RunConfig& cfg, std::uint64_t w
     try {
         // Allocation and first-touch happen here, on the worker's own thread, never inside
         // the timed region.
-        w.setup(WorkloadContext{
-            .thread_index = index, .working_set_bytes = working_set, .seed = cfg.seed});
+        WorkloadContext ctx = base_ctx;
+        ctx.thread_index = index;
+        w.setup(ctx);
         // Cold prep is set up after the workload, because what it has to do depends on how
         // big the workload's region turned out to be. Its own buffer (evict mode) is
         // allocated and first-touched here, on this thread, never in the trial loop.
         cold.setup(cfg.cold, l3_kb, w.cold_region().size());
-        // Every worker computes the same answer from the same inputs, but only a worker can
-        // compute it at all (it depends on the size of its own region), so worker 0
-        // publishes it for the main thread to put in params.cold.
+        if constexpr (requires { w.latency_histogram(); }) {
+            const auto h = w.latency_histogram();
+            slot.hist = h.data();
+        }
         if (index == 0) {
             report.effect.store(cold.effect(), std::memory_order_relaxed);
             report.bytes.store(cold.bytes(), std::memory_order_relaxed);
             report.huge_bytes.store(cold.scratch().huge_granted_bytes(), std::memory_order_relaxed);
+            report.batch_units.store(w.batch_units(), std::memory_order_relaxed);
+            if constexpr (requires { w.describe(); }) {
+                std::lock_guard lock{report.mu};
+                report.extra = w.describe();
+            }
         }
     } catch (const std::exception& e) {
         ok = false;
@@ -173,7 +245,7 @@ void worker(std::stop_token st, int index, const RunConfig& cfg, std::uint64_t w
     // Workers do not know how many trials there will be: the main thread decides warmup vs
     // timed per trial and ends the loop by requesting stop before its final arrival.
     const auto trial_len = std::chrono::milliseconds(cfg.trial_ms);
-    std::uint64_t cold_ns = 0;
+    std::uint64_t cold_ns = 0, pre_ns = 0;
     std::uint64_t gate_seen = 0;
     for (;;) {
         // When interleaving, sleep until this configuration's turn. Parking happens before
@@ -186,9 +258,17 @@ void worker(std::stop_token st, int index, const RunConfig& cfg, std::uint64_t w
         // the flush can pull the flushed lines (or, via a prefetcher, their neighbours)
         // straight back in. The barrier itself only touches the barrier's own cache lines.
         if (ok) {
+            // The workload's own pre-trial work comes first and is timed separately: for a
+            // disk workload it is a posix_fadvise(DONTNEED) over gigabytes, which is cold
+            // preparation of a different cache and has nothing to do with CLFLUSH's cost.
+            const auto p0 = Clock::now();
+            if constexpr (requires { w.before_trial(); })
+                w.before_trial();
             const auto c0 = Clock::now();
             cold.prepare(w.cold_region());
-            cold_ns = ns_between(c0, Clock::now());
+            const auto c1 = Clock::now();
+            pre_ns = ns_between(p0, c0);
+            cold_ns = ns_between(c0, c1);
         }
         start_b.arrive_and_wait();
         if (st.stop_requested())
@@ -198,6 +278,7 @@ void worker(std::stop_token st, int index, const RunConfig& cfg, std::uint64_t w
         // thread's reads after the end barrier never race with the next trial's writes.
         // cold_ns is measured before the barrier but published here for that reason.
         slot.cold_ns = cold_ns;
+        slot.pre_ns = pre_ns;
         slot.cpu_start = sched_getcpu();
         std::uint64_t ops = 0, batches = 0;
         const auto t0 = Clock::now();
@@ -213,6 +294,8 @@ void worker(std::stop_token st, int index, const RunConfig& cfg, std::uint64_t w
         slot.end = now;
         slot.ops = ops;
         slot.batches = batches;
+        if constexpr (requires { w.latency_used_buckets(); })
+            slot.hist_used = w.latency_used_buckets();
         slot.cpu_end = sched_getcpu();
         end_b.arrive_and_wait();
     }
@@ -221,7 +304,69 @@ void worker(std::stop_token st, int index, const RunConfig& cfg, std::uint64_t w
 }
 
 // Why a configuration stopped early, if it did.
-enum class StopReason { none, aborted, timed_out };
+enum class StopReason { none, aborted, timed_out, write_budget };
+
+// Merged per-call latencies for one trial. Only the metrics whose value is a percentile of
+// individual operations use this; everything else leaves it at zero.
+struct LatencySummary {
+    double p99_us = 0;
+    std::uint64_t samples = 0;
+    std::uint64_t overflow = 0; // calls slower than the histogram's one-second bound
+    double min_us = 0;
+    double max_us = 0;
+};
+
+// p99 over 1 us buckets, nearest rank: the smallest bucket whose cumulative count reaches
+// ceil(0.99 * n), reported as that bucket's upper edge.
+//
+// This is deliberately not the numpy-"linear" percentile that stats.hpp uses for trial
+// values. Interpolating between two adjacent 1 us buckets would invent a precision the
+// histogram does not have: the underlying samples were already rounded to a microsecond on
+// the way in. Nearest rank on the upper edge gives "99 % of reads completed within X us",
+// which is the sentence a p99 is meant to support, and it is quantized by at most 1 us -
+// well under 1 % of a 4 KiB read on any storage this would be pointed at.
+LatencySummary merge_latencies(const std::vector<Slot>& slots) {
+    LatencySummary out;
+    std::uint32_t used = 0;
+    for (const Slot& s : slots)
+        if (s.hist != nullptr)
+            used = std::max(used, s.hist_used);
+    if (used == 0)
+        return out;
+
+    for (std::uint32_t b = 0; b < used; ++b)
+        for (const Slot& s : slots)
+            if (s.hist != nullptr)
+                out.samples += s.hist[b];
+    if (out.samples == 0)
+        return out;
+    if (used > kLatencyBuckets)
+        for (const Slot& s : slots)
+            if (s.hist != nullptr)
+                out.overflow += s.hist[kLatencyOverflowBucket];
+
+    const auto rank =
+        static_cast<std::uint64_t>(std::ceil(0.99 * static_cast<double>(out.samples) - 1e-9));
+    std::uint64_t cum = 0;
+    bool have_min = false;
+    for (std::uint32_t b = 0; b < used; ++b) {
+        std::uint64_t here = 0;
+        for (const Slot& s : slots)
+            if (s.hist != nullptr)
+                here += s.hist[b];
+        if (here == 0)
+            continue;
+        if (!have_min) {
+            out.min_us = static_cast<double>(b) + 1.0;
+            have_min = true;
+        }
+        out.max_us = static_cast<double>(b) + 1.0;
+        cum += here;
+        if (out.p99_us == 0 && cum >= rank)
+            out.p99_us = static_cast<double>(b) + 1.0;
+    }
+    return out;
+}
 
 // A trial whose workers did not all start within this much of the barrier release had a
 // late worker. That is host preemption, not the workload (M2.5 pitfall): such trials are
@@ -263,7 +408,8 @@ inline constexpr double kCanaryMaxRatio = 3.0;
 class ISession {
 public:
     virtual ~ISession() = default;
-    virtual void start() = 0; // spawn the pool; throws on setup failure
+    virtual void prepare() = 0; // once-per-configuration main-thread work, before start()
+    virtual void start() = 0;   // spawn the pool; throws on setup failure
     virtual bool wants_more_trials() const = 0;
     virtual void run_one_trial(const ProgressFn&) = 0;
     virtual void stop() = 0; // stop and join the workers
@@ -274,11 +420,16 @@ public:
 
 template <WorkloadImpl W> class ConfigSession final : public ISession {
 public:
-    ConfigSession(const RunConfig& cfg, Workload kind, Metric metric, int n_threads,
+    // metrics[0] is what the trial loop measures, and its value follows from the work units
+    // the workers counted. Any further metrics are read off the same trial by another route
+    // - today that is disk_rand_read_p99_us, a percentile of the individual reads that
+    // produced disk_rand_read_iops. They are one trial with two answers, not two trials.
+    ConfigSession(const RunConfig& cfg, Workload kind, std::vector<Metric> metrics, int n_threads,
                   std::uint64_t working_set, int l3_kb, const ClockCheck& clock,
-                  const std::vector<int>& cpu_list, bool park)
-        : cfg_(cfg), kind_(kind), metric_(metric), n_threads_(n_threads), working_set_(working_set),
-          l3_kb_(l3_kb), clock_(clock), park_(park),
+                  const std::vector<int>& cpu_list, bool park,
+                  std::atomic<std::uint64_t>* bytes_written)
+        : cfg_(cfg), kind_(kind), metrics_(std::move(metrics)), n_threads_(n_threads),
+          working_set_(working_set), l3_kb_(l3_kb), clock_(clock), park_(park),
           start_b_(n_threads + 1, [this] { t_release_ = Clock::now(); }),
           end_b_(n_threads + 1, [this] { t_done_ = Clock::now(); }), ready_(n_threads),
           slots_(static_cast<std::size_t>(n_threads)) {
@@ -288,8 +439,23 @@ public:
             if (cfg.pin)
                 assigned_.push_back(cpu);
         }
-        values_.reserve(static_cast<std::size_t>(cfg.trials));
-        results_.reserve(static_cast<std::size_t>(cfg.trials));
+        ctx_.thread_count = n_threads;
+        ctx_.working_set_bytes = working_set;
+        ctx_.seed = cfg.seed;
+        ctx_.metric = metrics_.front();
+        ctx_.options = &cfg.opts;
+        ctx_.bytes_written = bytes_written;
+        values_.resize(metrics_.size());
+        for (auto& v : values_)
+            v.reserve(static_cast<std::size_t>(cfg.trials));
+        results_.reserve(static_cast<std::size_t>(cfg.trials) * metrics_.size());
+    }
+
+    // Once per configuration, on the main thread, before any worker exists: creating and
+    // filling a multi-gigabyte test file is not something 16 workers should each attempt.
+    void prepare() override {
+        if constexpr (requires { W::prepare_config(ctx_); })
+            W::prepare_config(ctx_);
     }
     ConfigSession(const ConfigSession&) = delete;
     ConfigSession& operator=(const ConfigSession&) = delete;
@@ -298,10 +464,10 @@ public:
     void start() override {
         threads_.reserve(static_cast<std::size_t>(n_threads_));
         for (int i = 0; i < n_threads_; ++i)
-            threads_.emplace_back(worker<W>, i, std::cref(cfg_), working_set_, l3_kb_,
+            threads_.emplace_back(worker<W>, i, std::cref(cfg_), std::cref(ctx_), l3_kb_,
                                   std::ref(start_b_), std::ref(end_b_), std::ref(ready_),
                                   std::ref(slots_[static_cast<std::size_t>(i)]), std::ref(failure_),
-                                  std::ref(cold_report_), park_ ? &gate_ : nullptr);
+                                  std::ref(report_), park_ ? &gate_ : nullptr);
         // Fail fast if any worker could not set up. Workers that failed still take part in
         // the barriers (with zero ops) so the ones that succeeded are not left waiting
         // forever; we stop them at the first trial boundary.
@@ -351,7 +517,7 @@ public:
         else
             ++timed_done_;
 
-        std::uint64_t total_ops = 0, cold_ns_sum = 0, cold_ns_max = 0;
+        std::uint64_t total_ops = 0, cold_ns_sum = 0, cold_ns_max = 0, pre_ns_max = 0;
         auto first_start = slots_[0].start, last_start = slots_[0].start;
         json per_thread_ops = json::array(), per_thread_cpu = json::array(),
              per_thread_start_us = json::array();
@@ -360,6 +526,7 @@ public:
             total_ops += s.ops;
             cold_ns_sum += s.cold_ns;
             cold_ns_max = std::max(cold_ns_max, s.cold_ns);
+            pre_ns_max = std::max(pre_ns_max, s.pre_ns);
             first_start = std::min(first_start, s.start);
             last_start = std::max(last_start, s.start);
             const auto own_ns = ns_between(s.start, s.end);
@@ -380,58 +547,88 @@ public:
         // counts. Under --interleave the wall clock is mostly other configurations.
         active_ns_ += ns;
         const double spread_us = static_cast<double>(ns_between(first_start, last_start)) / 1e3;
+        // Reading the histograms happens here, between the end barrier and the next trial's
+        // start barrier, so it is outside every timed region and cannot race a worker.
+        const LatencySummary lat = merge_latencies(slots_);
 
-        Result r;
-        r.workload = kind_;
-        r.thread_count = n_threads_;
-        r.working_set_bytes = working_set_;
-        r.metric = metric_;
-        r.value = static_cast<double>(total_ops) / (static_cast<double>(ns) / 1e9);
-        r.trial = warmup ? -warmups_done_ : timed_done_ - 1; // negative while warming up
-        r.timestamp = utc_now_rfc3339();
-        r.duration_ns = ns == 0 ? 1 : ns;
-        const auto effect = cold_report_.effect.load(std::memory_order_relaxed);
-        r.params =
-            json{// What actually happened, then what was asked for: they differ when the region
-                 // could not have been cache-resident in the first place ("n/a").
-                 {"cold", to_string(effect)},
-                 {"cold_requested", to_string(cfg_.cold)},
-                 {"cold_bytes", cold_report_.bytes.load(std::memory_order_relaxed)},
-                 {"cold_prep_mean_us",
-                  static_cast<double>(cold_ns_sum) / static_cast<double>(n_threads_) / 1e3},
-                 {"cold_prep_max_us", static_cast<double>(cold_ns_max) / 1e3},
-                 {"huge_pages", cold_report_.huge_bytes.load(std::memory_order_relaxed) > 0},
-                 {"huge_page_bytes", cold_report_.huge_bytes.load(std::memory_order_relaxed)},
-                 {"pinned", cfg_.pin},
-                 {"cpus", assigned_},
-                 {"interleaved", park_},
-                 {"warmup_trials", cfg_.warmup_trials},
-                 {"warmup_ms", cfg_.warmup_ms},
-                 {"warmups_run", warmups_done_},
-                 {"trial_ms", cfg_.trial_ms},
-                 {"spin_ms", cfg_.spin_ms},
-                 {"seed", cfg_.seed},
-                 {"ops", total_ops},
-                 {"batch_ops", W::kBatchOps},
-                 {"clock_res_ns", clock_.resolution_ns},
-                 {"clock_call_ns", clock_.mean_call_ns},
-                 {"start_spread_us", spread_us},
-                 {"late_start", spread_us > kLateTrialUs},
-                 {"release_to_first_start_us",
-                  static_cast<double>(ns_between(t_release_, first_start)) / 1e3},
-                 {"per_thread_ops_per_s", per_thread_ops},
-                 {"per_thread_cpu", per_thread_cpu},
-                 {"per_thread_start_us", per_thread_start_us},
-                 {"pin_violations", pin_violations},
-                 {"pin_failures", pin_failures}};
-        if (progress)
-            progress(r, warmup);
-        if (!warmup) {
-            values_.push_back(r.value);
-            if (spread_us > kLateTrialUs)
-                ++late_trials_;
-            results_.push_back(std::move(r));
+        const auto effect = report_.effect.load(std::memory_order_relaxed);
+        json params = json{// What actually happened, then what was asked for: they differ when the
+                           // region could not have been cache-resident in the first place ("n/a").
+                           {"cold", to_string(effect)},
+                           {"cold_requested", to_string(cfg_.cold)},
+                           {"cold_bytes", report_.bytes.load(std::memory_order_relaxed)},
+                           {"cold_prep_mean_us", static_cast<double>(cold_ns_sum) /
+                                                     static_cast<double>(n_threads_) / 1e3},
+                           {"cold_prep_max_us", static_cast<double>(cold_ns_max) / 1e3},
+                           {"pre_trial_prep_max_us", static_cast<double>(pre_ns_max) / 1e3},
+                           {"huge_pages", report_.huge_bytes.load(std::memory_order_relaxed) > 0},
+                           {"huge_page_bytes", report_.huge_bytes.load(std::memory_order_relaxed)},
+                           {"pinned", cfg_.pin},
+                           {"cpus", assigned_},
+                           {"interleaved", park_},
+                           {"warmup_trials", cfg_.warmup_trials},
+                           {"warmup_ms", cfg_.warmup_ms},
+                           {"warmups_run", warmups_done_},
+                           {"trial_ms", cfg_.trial_ms},
+                           {"spin_ms", cfg_.spin_ms},
+                           {"seed", cfg_.seed},
+                           // "ops" is the work-unit count summed over threads. What a unit is
+                           // depends on the metric and is spelled out next to it rather than left
+                           // to the reader: bytes for a bandwidth metric, dependent loads for a
+                           // latency chase, completed I/Os for IOPS.
+                           {"ops", total_ops},
+                           {"unit_of_work", to_string(work_unit_of(metrics_.front()))},
+                           {"batch_ops", report_.batch_units.load(std::memory_order_relaxed)},
+                           {"clock_res_ns", clock_.resolution_ns},
+                           {"clock_call_ns", clock_.mean_call_ns},
+                           {"start_spread_us", spread_us},
+                           {"late_start", spread_us > kLateTrialUs},
+                           {"release_to_first_start_us",
+                            static_cast<double>(ns_between(t_release_, first_start)) / 1e3},
+                           {"per_thread_ops_per_s", per_thread_ops},
+                           {"per_thread_cpu", per_thread_cpu},
+                           {"per_thread_start_us", per_thread_start_us},
+                           {"pin_violations", pin_violations},
+                           {"pin_failures", pin_failures}};
+        {
+            // Whatever this workload wants to say about itself: buffer sizes, the chase
+            // length, the file it opened. Merged rather than nested so the dashboard and
+            // `bench report` can read one flat params object.
+            std::lock_guard lock{report_.mu};
+            for (const auto& [k, v] : report_.extra.items())
+                params[k] = v;
         }
+        if (lat.samples > 0) {
+            params["latency_samples"] = lat.samples;
+            params["latency_min_us"] = lat.min_us;
+            params["latency_max_us"] = lat.max_us;
+            params["latency_overflow"] = lat.overflow;
+        }
+
+        const auto stamp = utc_now_rfc3339();
+        for (std::size_t mi = 0; mi < metrics_.size(); ++mi) {
+            const Metric m = metrics_[mi];
+            Result r;
+            r.workload = kind_;
+            r.thread_count = n_threads_;
+            r.working_set_bytes = working_set_;
+            r.metric = m;
+            r.value = value_rule_of(m) == ValueRule::latency_p99_us
+                          ? lat.p99_us
+                          : value_from_units(m, total_ops, ns);
+            r.trial = warmup ? -warmups_done_ : timed_done_ - 1; // negative while warming up
+            r.timestamp = stamp;
+            r.duration_ns = ns == 0 ? 1 : ns;
+            r.params = params;
+            if (progress)
+                progress(r, warmup);
+            if (!warmup) {
+                values_[mi].push_back(r.value);
+                results_.push_back(std::move(r));
+            }
+        }
+        if (!warmup && spread_us > kLateTrialUs)
+            ++late_trials_;
     }
 
     // Results are buffered in the session rather than appended straight to the envelope,
@@ -439,62 +636,67 @@ public:
     // configuration, and a configuration whose clock canary fails is thrown away whole.
     void emit(RunEnvelope& out, const ClockCheck& canary_start, const ClockCheck& canary_end,
               int attempts) override {
-        if (values_.empty())
+        if (results_.empty())
             return;
         for (auto& r : results_)
             out.results.push_back(std::move(r));
         results_.clear();
 
-        // One summary per configuration, over the timed trials that actually ran.
+        // One summary per configuration per metric, over the timed trials that actually ran.
         // Statistics are defined in stats.hpp (sample stddev, numpy-linear percentiles).
-        const SummaryStats st = summarize(values_);
-        Summary sum;
-        sum.workload = kind_;
-        sum.metric = metric_;
-        sum.thread_count = n_threads_;
-        sum.working_set_bytes = working_set_;
-        sum.n = static_cast<int>(st.n);
-        sum.mean = st.mean;
-        sum.median = st.median;
-        sum.stddev = st.stddev;
-        sum.cov = st.cov;
-        sum.min = st.min;
-        sum.p5 = st.p5;
-        sum.p95 = st.p95;
-        sum.max = st.max;
-        sum.mad = st.mad;
-        // M2.5 reporting: how many trials had a late worker, and what the host-contention
-        // canary read before and after. Reported, never used to drop a trial.
-        sum.late_trials = late_trials_;
-        sum.canary_attempts = attempts;
-        sum.clock_call_ns_start = canary_start.mean_call_ns;
-        sum.clock_call_ns_end = canary_end.mean_call_ns;
-        out.summary.push_back(sum);
+        for (std::size_t mi = 0; mi < metrics_.size(); ++mi) {
+            if (values_[mi].empty())
+                continue;
+            const SummaryStats st = summarize(values_[mi]);
+            Summary sum;
+            sum.workload = kind_;
+            sum.metric = metrics_[mi];
+            sum.thread_count = n_threads_;
+            sum.working_set_bytes = working_set_;
+            sum.n = static_cast<int>(st.n);
+            sum.mean = st.mean;
+            sum.median = st.median;
+            sum.stddev = st.stddev;
+            sum.cov = st.cov;
+            sum.min = st.min;
+            sum.p5 = st.p5;
+            sum.p95 = st.p95;
+            sum.max = st.max;
+            sum.mad = st.mad;
+            // M2.5 reporting: how many trials had a late worker, and what the host-contention
+            // canary read before and after. Reported, never used to drop a trial.
+            sum.late_trials = late_trials_;
+            sum.canary_attempts = attempts;
+            sum.clock_call_ns_start = canary_start.mean_call_ns;
+            sum.clock_call_ns_end = canary_end.mean_call_ns;
+            out.summary.push_back(sum);
+        }
     }
 
 private:
     const RunConfig& cfg_;
     Workload kind_;
-    Metric metric_;
+    std::vector<Metric> metrics_;
     int n_threads_;
     std::uint64_t working_set_;
     int l3_kb_;
     const ClockCheck& clock_;
     bool park_;
+    WorkloadContext ctx_;
 
     Clock::time_point t_release_{}, t_done_{};
     SpinBarrier start_b_, end_b_;
     std::latch ready_;
     std::vector<Slot> slots_;
     WorkerFailure failure_;
-    ColdReport cold_report_;
+    WorkerReport report_;
     Gate gate_;
     std::vector<int> assigned_;
     std::vector<std::jthread> threads_;
 
     int warmups_done_ = 0, timed_done_ = 0, late_trials_ = 0;
     std::uint64_t active_ns_ = 0;
-    std::vector<double> values_;
+    std::vector<std::vector<double>> values_; // one per metric, parallel to metrics_
     std::vector<Result> results_;
 };
 
@@ -528,6 +730,13 @@ RunEnvelope run_benchmarks(const RunConfig& cfg, const MachineInfo& machine,
     for (int c : cfg.cpus)
         if (c < 0)
             throw std::invalid_argument("cpu ids must be >= 0");
+
+    // `--workload mem_bw` means "all three of its metrics"; an explicit metric list wins.
+    std::vector<Metric> metrics = cfg.metrics;
+    if (metrics.empty())
+        for (Workload w : cfg.workloads)
+            for (Metric m : metrics_of(w))
+                metrics.push_back(m);
 
     RunEnvelope run;
     run.run_id = new_run_id();
@@ -567,55 +776,65 @@ RunEnvelope run_benchmarks(const RunConfig& cfg, const MachineInfo& machine,
                                                    std::chrono::duration<double>(cfg.max_seconds))
                               : Clock::time_point{};
 
-    // Every (workload, thread count, working set) the run will cover, in order.
+    // Every (metric, thread count, working set) the run will cover, in order.
+    //
+    // A configuration is per *metric*, not per workload: mem_bw owns three metrics and a
+    // trial that mixed reads and writes would report neither. The exception is a metric
+    // that is a different view of the same trial - disk_rand_read_p99_us is the percentile
+    // of the very reads that disk_rand_read_iops counts - which rides along in the same
+    // session instead of paying for a second run of the same work.
     struct ConfigSpec {
         Workload kind;
-        Metric metric;
+        std::vector<Metric> metrics;
         int threads;
         std::uint64_t working_set;
     };
     std::vector<ConfigSpec> specs;
-    for (Workload kind : cfg.workloads) {
-        Metric metric{};
-        switch (kind) {
-        case Workload::cpu_int:
-            metric = Metric::cpu_int_ops;
-            break;
-        case Workload::cpu_fp:
-            metric = Metric::cpu_fp_ops;
-            break;
-        case Workload::cpu_hash:
-            metric = Metric::cpu_hash_ops;
-            break;
-        default:
+    for (Metric metric : metrics) {
+        const Workload kind = workload_of(metric);
+        if (!is_implemented(kind))
             throw std::runtime_error(
                 std::format("workload '{}' is not implemented yet", to_string(kind)));
-        }
+        std::vector<Metric> group{metric};
+        for (Metric rider : riders_of(metric))
+            group.push_back(rider);
         for (int threads : cfg.thread_counts)
             for (std::uint64_t ws : cfg.working_sets)
-                specs.push_back({kind, metric, threads, ws});
+                specs.push_back({kind, group, threads, effective_working_set(kind, ws)});
     }
 
+    // Run-wide accounting for workloads that write to disk (M4.1). Shared by every session.
+    std::atomic<std::uint64_t> bytes_written{0};
+
     auto make_session = [&](const ConfigSpec& sp, bool park) -> std::unique_ptr<ISession> {
+        auto build = [&]<class W>() -> std::unique_ptr<ISession> {
+            return std::make_unique<ConfigSession<W>>(cfg, sp.kind, sp.metrics, sp.threads,
+                                                      sp.working_set, machine.l3_kb, clock,
+                                                      cpu_list, park, &bytes_written);
+        };
         switch (sp.kind) {
         case Workload::cpu_int:
-            return std::make_unique<ConfigSession<CpuIntWorkload>>(
-                cfg, sp.kind, sp.metric, sp.threads, sp.working_set, machine.l3_kb, clock, cpu_list,
-                park);
+            return build.template operator()<CpuIntWorkload>();
         case Workload::cpu_fp:
-            return std::make_unique<ConfigSession<CpuFpWorkload>>(
-                cfg, sp.kind, sp.metric, sp.threads, sp.working_set, machine.l3_kb, clock, cpu_list,
-                park);
+            return build.template operator()<CpuFpWorkload>();
+        case Workload::cpu_hash:
+            return build.template operator()<CpuHashWorkload>();
         default:
-            return std::make_unique<ConfigSession<CpuHashWorkload>>(
-                cfg, sp.kind, sp.metric, sp.threads, sp.working_set, machine.l3_kb, clock, cpu_list,
-                park);
+            return build.template operator()<MemBwWorkload>();
         }
     };
 
     auto should_stop = [&](StopReason& out_reason) {
         if (g_abort.load(std::memory_order_relaxed)) {
             out_reason = StopReason::aborted;
+            return true;
+        }
+        // The write budget is a wear limit, not a measurement rule: it stops the run at a
+        // trial boundary, exactly like --max-seconds, so every trial that did run is a whole
+        // honest trial rather than a truncated one.
+        if (cfg.opts.write_budget_bytes > 0 &&
+            bytes_written.load(std::memory_order_relaxed) >= cfg.opts.write_budget_bytes) {
+            out_reason = StopReason::write_budget;
             return true;
         }
         if (deadline != Clock::time_point{} && Clock::now() >= deadline) {
@@ -668,6 +887,7 @@ RunEnvelope run_benchmarks(const RunConfig& cfg, const MachineInfo& machine,
         sessions.reserve(specs.size());
         for (const auto& sp : specs) {
             sessions.push_back(make_session(sp, /*park=*/true));
+            sessions.back()->prepare();
             sessions.back()->start();
         }
         bool any = true;
@@ -717,6 +937,7 @@ RunEnvelope run_benchmarks(const RunConfig& cfg, const MachineInfo& machine,
                     continue;
                 }
                 auto sess = make_session(sp, /*park=*/false);
+                sess->prepare();
                 sess->start();
                 while (sess->wants_more_trials() && !should_stop(stop))
                     sess->run_one_trial(progress);
@@ -751,6 +972,12 @@ RunEnvelope run_benchmarks(const RunConfig& cfg, const MachineInfo& machine,
         std::cerr << std::format("bench: --max-seconds {:g} reached; writing results collected "
                                  "so far ({} trials, {} summaries)\n",
                                  cfg.max_seconds, run.results.size(), run.summary.size());
+    else if (stop == StopReason::write_budget)
+        std::cerr << std::format("bench: --write-budget {} bytes spent ({} written); writing "
+                                 "results collected so far ({} trials, {} summaries)\n",
+                                 cfg.opts.write_budget_bytes,
+                                 bytes_written.load(std::memory_order_relaxed), run.results.size(),
+                                 run.summary.size());
     run.finished_at = utc_now_rfc3339();
     return run;
 }

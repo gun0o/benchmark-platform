@@ -1,0 +1,453 @@
+# M3.1 - is the read loop vectorized?
+#
+# PLAN.md M3.1 Verify: "objdump: the read loop is vectorized (vpaddq on ymm)".
+# Command: objdump -d --no-show-raw-insn \
+#            build/release/CMakeFiles/bench_core.dir/src/workloads/mem_bw.cpp.o
+# g++ 13, -O3 -march=native, Intel Core Ultra 9 185H.
+#
+# sum_words() is inlined into MemBwWorkload::run_batch(). The read loop is the two
+# instructions at 7a4/7a8: two 256-bit accumulators (ymm0, ymm1), 64 bytes folded per
+# iteration with vpaddq taking its second operand straight from memory. The eight scalar
+# accumulators in the source became two ymm registers, which is what "8 lanes" was for.
+# The xmm vpaddq instructions that follow are the horizontal reduction at the end of a
+# pass, not the loop. vmovntdq appears in the --nt write and copy paths; vpbroadcastq +
+# vmovdqu %ymm0 is the plain write path.
+#
+# Full disassembly of run_batch() (435 instructions):
+
+0000000000000240 <_ZN5bench13MemBwWorkload9run_batchEv>:
+     240:	endbr64 
+     244:	push   %rbp
+     245:	mov    %rsp,%rbp
+     248:	push   %r15
+     24a:	push   %r14
+     24c:	push   %r13
+     24e:	mov    %rdi,%r13
+     251:	push   %r12
+     253:	push   %rbx
+     254:	and    $0xffffffffffffffe0,%rsp
+     258:	sub    $0xa0,%rsp
+     25f:	mov    0x30(%rdi),%rcx
+     263:	mov    0x28(%rdi),%eax
+     266:	mov    (%rdi),%rbx
+     269:	mov    0x38(%rdi),%rsi
+     26d:	mov    %rcx,%r12
+     270:	shr    $0x3,%r12
+     274:	cmp    $0x1,%eax
+     277:	je     4e0 <_ZN5bench13MemBwWorkload9run_batchEv+0x2a0>
+     27d:	cmp    $0x2,%eax
+     280:	je     2a8 <_ZN5bench13MemBwWorkload9run_batchEv+0x68>
+     282:	test   %eax,%eax
+     284:	je     760 <_ZN5bench13MemBwWorkload9run_batchEv+0x520>
+     28a:	mov    0x58(%r13),%rax
+     28e:	mov    %rax,0x58(%r13)
+     292:	mov    0x40(%r13),%rax
+     296:	lea    -0x28(%rbp),%rsp
+     29a:	pop    %rbx
+     29b:	pop    %r12
+     29d:	pop    %r13
+     29f:	pop    %r14
+     2a1:	pop    %r15
+     2a3:	pop    %rbp
+     2a4:	ret    
+     2a5:	nopl   (%rax)
+     2a8:	and    $0xfffffffffffffff8,%rcx
+     2ac:	test   %rsi,%rsi
+     2af:	lea    (%rbx,%rcx,1),%rdi
+     2b3:	je     46b <_ZN5bench13MemBwWorkload9run_batchEv+0x22b>
+     2b9:	lea    -0x4(%r12),%rax
+     2be:	xor    %edx,%edx
+     2c0:	mov    %rsi,0x98(%rsp)
+     2c8:	mov    %rax,%r8
+     2cb:	and    $0xfffffffffffffffc,%rax
+     2cf:	shr    $0x2,%r8
+     2d3:	add    $0x4,%rax
+     2d7:	add    $0x1,%r8
+     2db:	shl    $0x5,%r8
+     2df:	cmp    $0x3,%r12
+     2e3:	cmovbe %rdx,%rax
+     2e7:	mov    %r12,%rdx
+     2ea:	mov    %r8,%r15
+     2ed:	sub    %rax,%rdx
+     2f0:	lea    0x0(,%rax,8),%r9
+     2f8:	mov    %rax,0x90(%rsp)
+     300:	lea    -0x1(%rdx),%r11
+     304:	mov    %rdx,%r14
+     307:	lea    0x8(%r9),%r10
+     30b:	and    $0x3,%edx
+     30e:	mov    %r11,0x88(%rsp)
+     316:	lea    0x1(%rax),%r11
+     31a:	and    $0xfffffffffffffffc,%r14
+     31e:	mov    %r11,0x68(%rsp)
+     323:	lea    -0x8(%rcx),%r11
+     327:	add    %r9,%rcx
+     32a:	add    %rbx,%rcx
+     32d:	mov    %r11,0x80(%rsp)
+     335:	lea    (%rbx,%r9,1),%r11
+     339:	mov    %rcx,0x70(%rsp)
+     33e:	lea    (%r14,%rax,1),%rcx
+     342:	xor    %r14d,%r14d
+     345:	mov    %rcx,0x20(%rsp)
+     34a:	lea    (%rbx,%r10,1),%rcx
+     34e:	mov    %rcx,0x30(%rsp)
+     353:	lea    (%rdi,%r10,1),%rcx
+     357:	mov    %rcx,0x28(%rsp)
+     35c:	lea    0x2(%rax),%rcx
+     360:	mov    %r13,%rax
+     363:	mov    %r14,%r13
+     366:	mov    %r11,0x78(%rsp)
+     36b:	mov    %r12,%r14
+     36e:	mov    %rbx,%r12
+     371:	mov    %rax,%rbx
+     374:	mov    %rcx,0x38(%rsp)
+     379:	mov    %rdx,0x60(%rsp)
+     37e:	mov    %r9,0x18(%rsp)
+     383:	jmp    3ac <_ZN5bench13MemBwWorkload9run_batchEv+0x16c>
+     385:	nopl   (%rax)
+     388:	mov    0x30(%rbx),%rdx
+     38c:	mov    %r12,%rsi
+     38f:	vzeroupper 
+     392:	call   397 <_ZN5bench13MemBwWorkload9run_batchEv+0x157>
+     397:	mov    %rax,%rdi
+     39a:	add    $0x1,%r13
+     39e:	cmp    %r13,0x98(%rsp)
+     3a6:	je     465 <_ZN5bench13MemBwWorkload9run_batchEv+0x225>
+     3ac:	cmpb   $0x0,0x48(%rbx)
+     3b0:	je     388 <_ZN5bench13MemBwWorkload9run_batchEv+0x148>
+     3b2:	cmp    $0x3,%r14
+     3b6:	jbe    3d4 <_ZN5bench13MemBwWorkload9run_batchEv+0x194>
+     3b8:	xor    %eax,%eax
+     3ba:	nopw   0x0(%rax,%rax,1)
+     3c0:	vmovdqu (%r12,%rax,1),%ymm6
+     3c6:	vmovntdq %ymm6,(%rdi,%rax,1)
+     3cb:	add    $0x20,%rax
+     3cf:	cmp    %r15,%rax
+     3d2:	jne    3c0 <_ZN5bench13MemBwWorkload9run_batchEv+0x180>
+     3d4:	cmp    %r14,0x90(%rsp)
+     3dc:	jae    450 <_ZN5bench13MemBwWorkload9run_batchEv+0x210>
+     3de:	cmpq   $0x2,0x88(%rsp)
+     3e7:	mov    0x78(%rsp),%rax
+     3ec:	jbe    3fd <_ZN5bench13MemBwWorkload9run_batchEv+0x1bd>
+     3ee:	cmpq   $0x10,0x80(%rsp)
+     3f7:	ja     480 <_ZN5bench13MemBwWorkload9run_batchEv+0x240>
+     3fd:	mov    (%rax),%rax
+     400:	mov    0x70(%rsp),%rsi
+     405:	cmp    %r14,0x68(%rsp)
+     40a:	mov    %rax,(%rsi)
+     40d:	jae    450 <_ZN5bench13MemBwWorkload9run_batchEv+0x210>
+     40f:	mov    0x30(%rsp),%rax
+     414:	mov    0x28(%rsp),%rsi
+     419:	cmp    %r14,0x38(%rsp)
+     41e:	mov    (%rax),%rax
+     421:	mov    %rax,(%rsi)
+     424:	jae    450 <_ZN5bench13MemBwWorkload9run_batchEv+0x210>
+     426:	mov    0x18(%rsp),%rsi
+     42b:	mov    0x10(%r12,%rsi,1),%rax
+     430:	mov    %rax,0x10(%rdi,%rsi,1)
+     435:	mov    0x90(%rsp),%rax
+     43d:	add    $0x3,%rax
+     441:	cmp    %r14,%rax
+     444:	jae    450 <_ZN5bench13MemBwWorkload9run_batchEv+0x210>
+     446:	mov    0x18(%r12,%rsi,1),%rax
+     44b:	mov    %rax,0x18(%rdi,%rsi,1)
+     450:	sfence 
+     453:	add    $0x1,%r13
+     457:	cmp    %r13,0x98(%rsp)
+     45f:	jne    3ac <_ZN5bench13MemBwWorkload9run_batchEv+0x16c>
+     465:	mov    %rbx,%r13
+     468:	vzeroupper 
+     46b:	mov    (%rdi),%rax
+     46e:	add    0x58(%r13),%rax
+     472:	mov    %rax,0x58(%r13)
+     476:	jmp    28e <_ZN5bench13MemBwWorkload9run_batchEv+0x4e>
+     47b:	nopl   0x0(%rax,%rax,1)
+     480:	vmovdqu (%rax),%ymm7
+     484:	mov    0x70(%rsp),%rax
+     489:	cmpq   $0x0,0x60(%rsp)
+     48f:	vmovdqa %ymm7,0x40(%rsp)
+     495:	vmovdqu %ymm7,(%rax)
+     499:	je     450 <_ZN5bench13MemBwWorkload9run_batchEv+0x210>
+     49b:	mov    0x20(%rsp),%rsi
+     4a0:	mov    (%r12,%rsi,8),%rdx
+     4a4:	lea    0x0(,%rsi,8),%rax
+     4ac:	mov    %rdx,(%rdi,%rsi,8)
+     4b0:	lea    0x1(%rsi),%rdx
+     4b4:	cmp    %r14,%rdx
+     4b7:	jae    450 <_ZN5bench13MemBwWorkload9run_batchEv+0x210>
+     4b9:	mov    0x8(%r12,%rax,1),%rdx
+     4be:	mov    %rdx,0x8(%rdi,%rax,1)
+     4c3:	lea    0x2(%rsi),%rdx
+     4c7:	cmp    %r14,%rdx
+     4ca:	jae    450 <_ZN5bench13MemBwWorkload9run_batchEv+0x210>
+     4cc:	mov    0x10(%r12,%rax,1),%rdx
+     4d1:	mov    %rdx,0x10(%rdi,%rax,1)
+     4d6:	sfence 
+     4d9:	jmp    453 <_ZN5bench13MemBwWorkload9run_batchEv+0x213>
+     4de:	xchg   %ax,%ax
+     4e0:	test   %rsi,%rsi
+     4e3:	je     6b2 <_ZN5bench13MemBwWorkload9run_batchEv+0x472>
+     4e9:	lea    -0x4(%r12),%rax
+     4ee:	mov    %rcx,%r8
+     4f1:	and    $0xffffffffffffffe0,%rcx
+     4f5:	mov    %rax,%rdx
+     4f8:	shr    $0x5,%r8
+     4fc:	and    $0xfffffffffffffffc,%rax
+     500:	add    %rbx,%rcx
+     503:	shr    $0x2,%rdx
+     507:	lea    0x4(%rax),%r9
+     50b:	shl    $0x2,%r8
+     50f:	xor    %eax,%eax
+     511:	shl    $0x5,%rdx
+     515:	cmp    $0x3,%r12
+     519:	lea    -0x1(%r12),%r10
+     51e:	cmovbe %rax,%r9
+     522:	lea    0x20(%rbx,%rdx,1),%rdi
+     527:	lea    0x0(,%r9,8),%rax
+     52f:	lea    0x2(%r9),%rdx
+     533:	mov    %rdx,0x98(%rsp)
+     53b:	lea    0x8(%rbx,%rax,1),%r15
+     540:	lea    0x10(%rbx,%rax,1),%rdx
+     545:	lea    (%rbx,%rax,1),%r14
+     549:	mov    %r15,0x90(%rsp)
+     551:	lea    0x18(%rbx,%rax,1),%rax
+     556:	mov    %rax,0x78(%rsp)
+     55b:	lea    0x1(%r9),%r11
+     55f:	mov    %rdx,0x88(%rsp)
+     567:	lea    0x3(%r9),%rdx
+     56b:	mov    %rdx,0x80(%rsp)
+     573:	xor    %edx,%edx
+     575:	nopl   (%rax)
+     578:	mov    0x50(%r13),%rax
+     57c:	add    %rdx,%rax
+     57f:	cmpb   $0x0,0x48(%r13)
+     584:	vmovq  %rax,%xmm1
+     589:	jne    6c8 <_ZN5bench13MemBwWorkload9run_batchEv+0x488>
+     58f:	test   %r12,%r12
+     592:	je     605 <_ZN5bench13MemBwWorkload9run_batchEv+0x3c5>
+     594:	cmp    $0x2,%r10
+     598:	jbe    908 <_ZN5bench13MemBwWorkload9run_batchEv+0x6c8>
+     59e:	mov    %rcx,%rdi
+     5a1:	vpbroadcastq %xmm1,%ymm0
+     5a6:	mov    %rbx,%rax
+     5a9:	sub    %rbx,%rdi
+     5ac:	and    $0x20,%edi
+     5af:	je     5c0 <_ZN5bench13MemBwWorkload9run_batchEv+0x380>
+     5b1:	lea    0x20(%rbx),%rax
+     5b5:	vmovdqu %ymm0,(%rbx)
+     5b9:	cmp    %rax,%rcx
+     5bc:	je     5d2 <_ZN5bench13MemBwWorkload9run_batchEv+0x392>
+     5be:	xchg   %ax,%ax
+     5c0:	vmovdqu %ymm0,(%rax)
+     5c4:	add    $0x40,%rax
+     5c8:	vmovdqu %ymm0,-0x20(%rax)
+     5cd:	cmp    %rax,%rcx
+     5d0:	jne    5c0 <_ZN5bench13MemBwWorkload9run_batchEv+0x380>
+     5d2:	cmp    %r8,%r12
+     5d5:	mov    %r8,%rax
+     5d8:	je     605 <_ZN5bench13MemBwWorkload9run_batchEv+0x3c5>
+     5da:	lea    0x1(%rax),%r9
+     5de:	lea    0x0(,%rax,8),%rdi
+     5e6:	vmovq  %xmm1,(%rbx,%rax,8)
+     5eb:	cmp    %r12,%r9
+     5ee:	jae    605 <_ZN5bench13MemBwWorkload9run_batchEv+0x3c5>
+     5f0:	add    $0x2,%rax
+     5f4:	vmovq  %xmm1,0x8(%rbx,%rdi,1)
+     5fa:	cmp    %r12,%rax
+     5fd:	jae    605 <_ZN5bench13MemBwWorkload9run_batchEv+0x3c5>
+     5ff:	vmovq  %xmm1,0x10(%rbx,%rdi,1)
+     605:	add    $0x1,%rdx
+     609:	cmp    %rdx,%rsi
+     60c:	je     6af <_ZN5bench13MemBwWorkload9run_batchEv+0x46f>
+     612:	test   %r12,%r12
+     615:	je     8f3 <_ZN5bench13MemBwWorkload9run_batchEv+0x6b3>
+     61b:	nopl   0x0(%rax,%rax,1)
+     620:	mov    0x50(%r13),%rdi
+     624:	add    %rdx,%rdi
+     627:	cmp    $0x2,%r10
+     62b:	jbe    901 <_ZN5bench13MemBwWorkload9run_batchEv+0x6c1>
+     631:	mov    %rcx,%r9
+     634:	vmovq  %rdi,%xmm7
+     639:	mov    %rbx,%rax
+     63c:	sub    %rbx,%r9
+     63f:	vpbroadcastq %xmm7,%ymm0
+     644:	and    $0x20,%r9d
+     648:	je     660 <_ZN5bench13MemBwWorkload9run_batchEv+0x420>
+     64a:	lea    0x20(%rbx),%rax
+     64e:	vmovdqu %ymm0,(%rbx)
+     652:	cmp    %rax,%rcx
+     655:	je     672 <_ZN5bench13MemBwWorkload9run_batchEv+0x432>
+     657:	nopw   0x0(%rax,%rax,1)
+     660:	vmovdqu %ymm0,(%rax)
+     664:	add    $0x40,%rax
+     668:	vmovdqu %ymm0,-0x20(%rax)
+     66d:	cmp    %rax,%rcx
+     670:	jne    660 <_ZN5bench13MemBwWorkload9run_batchEv+0x420>
+     672:	cmp    %r8,%r12
+     675:	mov    %r8,%rax
+     678:	je     6a2 <_ZN5bench13MemBwWorkload9run_batchEv+0x462>
+     67a:	lea    0x1(%rax),%r11
+     67e:	mov    %rdi,(%rbx,%rax,8)
+     682:	lea    0x0(,%rax,8),%r9
+     68a:	cmp    %r12,%r11
+     68d:	jae    6a2 <_ZN5bench13MemBwWorkload9run_batchEv+0x462>
+     68f:	add    $0x2,%rax
+     693:	mov    %rdi,0x8(%rbx,%r9,1)
+     698:	cmp    %r12,%rax
+     69b:	jae    6a2 <_ZN5bench13MemBwWorkload9run_batchEv+0x462>
+     69d:	mov    %rdi,0x10(%rbx,%r9,1)
+     6a2:	add    $0x1,%rdx
+     6a6:	cmp    %rsi,%rdx
+     6a9:	jb     620 <_ZN5bench13MemBwWorkload9run_batchEv+0x3e0>
+     6af:	vzeroupper 
+     6b2:	mov    (%rbx),%rax
+     6b5:	add    0x58(%r13),%rax
+     6b9:	mov    %rax,0x58(%r13)
+     6bd:	jmp    28e <_ZN5bench13MemBwWorkload9run_batchEv+0x4e>
+     6c2:	nopw   0x0(%rax,%rax,1)
+     6c8:	cmp    $0x3,%r12
+     6cc:	vpbroadcastq %xmm1,%ymm0
+     6d1:	jbe    702 <_ZN5bench13MemBwWorkload9run_batchEv+0x4c2>
+     6d3:	mov    %rdi,%r15
+     6d6:	mov    %rbx,%rax
+     6d9:	sub    %rbx,%r15
+     6dc:	and    $0x20,%r15d
+     6e0:	je     6f0 <_ZN5bench13MemBwWorkload9run_batchEv+0x4b0>
+     6e2:	lea    0x20(%rbx),%rax
+     6e6:	vmovntdq %ymm0,(%rbx)
+     6ea:	cmp    %rax,%rdi
+     6ed:	je     702 <_ZN5bench13MemBwWorkload9run_batchEv+0x4c2>
+     6ef:	nop
+     6f0:	vmovntdq %ymm0,(%rax)
+     6f4:	vmovntdq %ymm0,0x20(%rax)
+     6f9:	add    $0x40,%rax
+     6fd:	cmp    %rax,%rdi
+     700:	jne    6f0 <_ZN5bench13MemBwWorkload9run_batchEv+0x4b0>
+     702:	cmp    %r12,%r9
+     705:	jae    746 <_ZN5bench13MemBwWorkload9run_batchEv+0x506>
+     707:	cmp    %r12,%r11
+     70a:	vmovq  %xmm1,(%r14)
+     70f:	jae    746 <_ZN5bench13MemBwWorkload9run_batchEv+0x506>
+     711:	mov    0x90(%rsp),%rax
+     719:	cmp    %r12,0x98(%rsp)
+     721:	vmovq  %xmm1,(%rax)
+     725:	jae    746 <_ZN5bench13MemBwWorkload9run_batchEv+0x506>
+     727:	mov    0x88(%rsp),%rax
+     72f:	cmp    %r12,0x80(%rsp)
+     737:	vmovq  %xmm1,(%rax)
+     73b:	jae    746 <_ZN5bench13MemBwWorkload9run_batchEv+0x506>
+     73d:	mov    0x78(%rsp),%rax
+     742:	vmovq  %xmm1,(%rax)
+     746:	sfence 
+     749:	add    $0x1,%rdx
+     74d:	cmp    %rdx,%rsi
+     750:	jne    578 <_ZN5bench13MemBwWorkload9run_batchEv+0x338>
+     756:	jmp    6af <_ZN5bench13MemBwWorkload9run_batchEv+0x46f>
+     75b:	nopl   0x0(%rax,%rax,1)
+     760:	test   %rsi,%rsi
+     763:	je     28a <_ZN5bench13MemBwWorkload9run_batchEv+0x4a>
+     769:	lea    -0x8(%r12),%r9
+     76e:	xor    %r8d,%r8d
+     771:	mov    %r9,%rdi
+     774:	and    $0xfffffffffffffff8,%r9
+     778:	shr    $0x3,%rdi
+     77c:	add    $0x1,%rdi
+     780:	cmp    $0x7,%r12
+     784:	jbe    8d0 <_ZN5bench13MemBwWorkload9run_batchEv+0x690>
+     78a:	vpxor  %xmm1,%xmm1,%xmm1
+     78e:	mov    %rbx,%rax
+     791:	xor    %edx,%edx
+     793:	vmovdqa %ymm1,%ymm0
+     797:	nopw   0x0(%rax,%rax,1)
+     7a0:	add    $0x1,%rdx
+     7a4:	vpaddq (%rax),%ymm0,%ymm0
+     7a8:	vpaddq 0x20(%rax),%ymm1,%ymm1
+     7ad:	add    $0x40,%rax
+     7b1:	cmp    %rdi,%rdx
+     7b4:	jb     7a0 <_ZN5bench13MemBwWorkload9run_batchEv+0x560>
+     7b6:	vmovdqa %xmm0,%xmm3
+     7ba:	vmovdqa %xmm0,%xmm4
+     7be:	vmovdqa %xmm1,%xmm7
+     7c2:	vextracti128 $0x1,%ymm0,%xmm0
+     7c8:	vpsrldq $0x8,%xmm1,%xmm5
+     7cd:	vextracti128 $0x1,%ymm1,%xmm1
+     7d3:	vpsrldq $0x8,%xmm3,%xmm3
+     7d8:	vpsrldq $0x8,%xmm0,%xmm2
+     7dd:	vmovdqa %xmm1,%xmm6
+     7e1:	lea    0x8(%r9),%rdx
+     7e5:	vpsrldq $0x8,%xmm1,%xmm1
+     7ea:	vpaddq %xmm3,%xmm0,%xmm0
+     7ee:	cmp    %r12,%rdx
+     7f1:	jae    88c <_ZN5bench13MemBwWorkload9run_batchEv+0x64c>
+     7f7:	mov    %r12,%r10
+     7fa:	sub    %rdx,%r10
+     7fd:	lea    -0x1(%r10),%rax
+     801:	cmp    $0x2,%rax
+     805:	jbe    855 <_ZN5bench13MemBwWorkload9run_batchEv+0x615>
+     807:	mov    %r10,%rcx
+     80a:	lea    (%rbx,%rdx,8),%rax
+     80e:	vpxor  %xmm3,%xmm3,%xmm3
+     812:	shr    $0x2,%rcx
+     816:	shl    $0x5,%rcx
+     81a:	add    %rax,%rcx
+     81d:	nopl   (%rax)
+     820:	vpaddq (%rax),%ymm3,%ymm3
+     824:	add    $0x20,%rax
+     828:	cmp    %rax,%rcx
+     82b:	jne    820 <_ZN5bench13MemBwWorkload9run_batchEv+0x5e0>
+     82d:	vextracti128 $0x1,%ymm3,%xmm8
+     833:	mov    %r10,%rax
+     836:	vpaddq %xmm3,%xmm8,%xmm3
+     83a:	and    $0xfffffffffffffffc,%rax
+     83e:	vpsrldq $0x8,%xmm3,%xmm8
+     843:	add    %rax,%rdx
+     846:	and    $0x3,%r10d
+     84a:	vpaddq %xmm8,%xmm3,%xmm3
+     84f:	vpaddq %xmm3,%xmm4,%xmm4
+     853:	je     88c <_ZN5bench13MemBwWorkload9run_batchEv+0x64c>
+     855:	vmovq  (%rbx,%rdx,8),%xmm3
+     85a:	lea    0x1(%rdx),%rcx
+     85e:	lea    0x0(,%rdx,8),%rax
+     866:	cmp    %r12,%rcx
+     869:	vpaddq %xmm3,%xmm4,%xmm4
+     86d:	jae    88c <_ZN5bench13MemBwWorkload9run_batchEv+0x64c>
+     86f:	vmovq  0x8(%rbx,%rax,1),%xmm3
+     875:	add    $0x2,%rdx
+     879:	cmp    %r12,%rdx
+     87c:	vpaddq %xmm3,%xmm4,%xmm4
+     880:	jae    88c <_ZN5bench13MemBwWorkload9run_batchEv+0x64c>
+     882:	vmovq  0x10(%rbx,%rax,1),%xmm3
+     888:	vpaddq %xmm3,%xmm4,%xmm4
+     88c:	vmovq  0x58(%r13),%xmm3
+     892:	vpaddq %xmm7,%xmm2,%xmm2
+     896:	vpaddq %xmm3,%xmm2,%xmm2
+     89a:	vpaddq %xmm5,%xmm2,%xmm2
+     89e:	vpaddq %xmm6,%xmm2,%xmm2
+     8a2:	vpaddq %xmm1,%xmm2,%xmm1
+     8a6:	vpaddq %xmm0,%xmm1,%xmm0
+     8aa:	vpaddq %xmm4,%xmm0,%xmm0
+     8ae:	vmovq  %xmm0,0x58(%r13)
+     8b4:	add    $0x1,%r8
+     8b8:	cmp    %r8,%rsi
+     8bb:	jne    780 <_ZN5bench13MemBwWorkload9run_batchEv+0x540>
+     8c1:	mov    0x58(%r13),%rax
+     8c5:	vzeroupper 
+     8c8:	jmp    28e <_ZN5bench13MemBwWorkload9run_batchEv+0x4e>
+     8cd:	nopl   (%rax)
+     8d0:	vpxor  %xmm0,%xmm0,%xmm0
+     8d4:	xor    %edx,%edx
+     8d6:	vmovdqa %xmm0,%xmm1
+     8da:	vmovdqa %xmm0,%xmm6
+     8de:	vmovdqa %xmm0,%xmm5
+     8e2:	vmovdqa %xmm0,%xmm7
+     8e6:	vmovdqa %xmm0,%xmm2
+     8ea:	vmovdqa %xmm0,%xmm4
+     8ee:	jmp    7ee <_ZN5bench13MemBwWorkload9run_batchEv+0x5ae>
+     8f3:	add    $0x1,%rdx
+     8f7:	cmp    %rsi,%rdx
+     8fa:	jb     8f3 <_ZN5bench13MemBwWorkload9run_batchEv+0x6b3>
+     8fc:	jmp    6af <_ZN5bench13MemBwWorkload9run_batchEv+0x46f>
+     901:	xor    %eax,%eax
+     903:	jmp    67a <_ZN5bench13MemBwWorkload9run_batchEv+0x43a>
+     908:	xor    %eax,%eax
+     90a:	jmp    5da <_ZN5bench13MemBwWorkload9run_batchEv+0x39a>
+     90f:	nop

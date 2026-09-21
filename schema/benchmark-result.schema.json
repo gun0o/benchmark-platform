@@ -221,6 +221,52 @@
         "queue_depth": {
           "type": "integer",
           "minimum": 1
+        },
+        "unit_of_work": {
+          "type": "string",
+          "enum": [
+            "ops",
+            "bytes",
+            "loads",
+            "ios"
+          ],
+          "description": "What the 'ops' and 'batch_ops' counts are counting for this metric. Recorded next to them so a row is self-describing: 'ops' is operations for cpu_*, bytes for the bandwidth metrics, dependent loads for mem_latency and completed I/Os for disk_rand."
+        },
+        "pre_trial_prep_max_us": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Slowest worker's time in the workload's own before_trial() hook, which runs before the cold preparation and outside the timed region (dropping the page cache, clearing a latency histogram)."
+        },
+        "mem_mode": {
+          "type": "string",
+          "enum": [
+            "read",
+            "write",
+            "copy"
+          ],
+          "description": "mem_bw only: which of the three kernels this configuration ran."
+        },
+        "buffer_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total bytes allocated per thread. Equals working_set_bytes except for mem_copy_bw, which needs a source and a destination and so allocates twice it."
+        },
+        "passes_per_batch": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "mem_bw only: full passes over the buffer in one batch. Small working sets repeat the pass so that a batch is long enough to time."
+        },
+        "nt": {
+          "type": "boolean",
+          "description": "--nt was requested (non-temporal stores)."
+        },
+        "nt_effective": {
+          "type": "boolean",
+          "description": "--nt actually applied. False for reads, which have no non-temporal form here, and on a build without 32-byte streaming stores."
+        },
+        "huge_pages_requested": {
+          "type": "boolean",
+          "description": "MADV_HUGEPAGE was asked for. 'huge_pages' says whether the kernel granted any, measured from /proc/self/smaps."
         }
       }
     },

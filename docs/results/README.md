@@ -55,6 +55,42 @@ not say which is which. Pinning made no significant difference under Best perfor
 (all three within 1.6 standard errors); under Best power efficiency it was 6–9 % *slower*
 for two of the three. See `m2.4/README.md`.
 
+## Memory bandwidth — M3.1, 2026-09-21
+
+Source: `m3.1/`. Medians of 10 trials of 50 ms each, pinned, `--cold clflush`, 1 GB = 1e9
+bytes. Same power state as above. Full tables: `m3.1/analysis.md` and `m3.1/README.md`;
+the reasoning is in `docs/notes/M3.1.md` and the caveats in `docs/methodology.md`.
+
+| metric | L1 (32 KiB, 1 thread) | DRAM (256 MiB, 1 thread) | DRAM, best threads |
+|---|---:|---:|---:|
+| `mem_read_bw` | **253.7 GB/s** | 22.9 GB/s | **84.2 GB/s** at 16 threads |
+| `mem_write_bw` | **290.9 GB/s** | 14.1 GB/s | 41.4 GB/s at 8 threads (59.5 with `--nt`) |
+| `mem_copy_bw` | — (a copy allocates 2×, so it leaves L1 one step earlier) | 21.4 GB/s | 41.9 GB/s at 8 threads |
+
+Reads are **11× faster from L1 than from DRAM**, and the working-set sweep puts the steps
+where `sysinfo` says the caches are. The largest step is L2→L3 (2.5×), not L1→L2 (1.3×):
+a streaming read is close to the best case for this part's wide L2.
+
+The sharpest single feature is **write-allocate**. At the 48 KiB L1d boundary, write
+bandwidth falls 290.9 → 80.6 GB/s — a **3.6× cliff** — while read falls only 1.3×. A store
+of 8 bytes to a 64-byte line that is not resident has to fetch the line first. The
+rule-of-thumb "write ≈ ½ read" that follows is directionally right and numerically wrong
+here: measured **0.61–0.63**, because at low thread counts the *read* baseline is the
+core's outstanding-miss concurrency limit rather than a bandwidth ceiling. `--nt` closes
+the ratio to 0.90 at 8 threads and overshoots to 1.88 at 1 thread.
+
+One caveat carries into every copy number: **glibc's `memcpy` already uses non-temporal
+stores above ~24 MiB on this machine**, tested by forcing the tunable (−12.2 % at 256 MiB,
+unchanged at 8 MiB). `mem_copy_bw` and `mem_write_bw` are not on the same store path at
+DRAM-sized working sets.
+
+`mem_read_bw` at 22 threads reports 64.0 GB/s, *below* its 16-thread 84.2, with a worker
+more than 1 ms late off the start barrier in 100 % of trials — there is no vCPU left for
+the coordinator. It is published with its `late_trials` count, not dropped.
+
+No CoV claim is made from these runs: 10 trials is enough to draw a curve, not to state a
+variance. That is M3.3.
+
 ## Index
 
 | directory | milestone | what it holds |
@@ -65,6 +101,7 @@ for two of the three. See `m2.4/README.md`.
 | `m2.3/` | M2.3 | cold-cache infrastructure: flush vs evict, THP, cold-mode A/B |
 | `m2.4/` | M2.4 | the three CPU kernels, the thread sweep, Target #1, frequency probe |
 | `m2.5/` | M2.5 | the variance study: Target #2, the knob A/B, interleaving, the clock canary |
+| `m3.1/` | M3.1 | memory bandwidth: the working-set sweep, the thread knee, write-allocate, `--nt` |
 
 ## Targets
 
