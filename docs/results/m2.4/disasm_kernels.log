@@ -1,0 +1,245 @@
+M2.4 verify: disassembly of the three CPU kernels
+release build, g++ -O3 -march=native (never -ffast-math), from build/release/libbench_core.a
+
+The check: the operations each metric's definition names must appear in the loop that
+run_batch() actually repeats, at the multiplicity the op count claims. An exact count
+is a much stronger check than presence - it shows nothing was folded, hoisted or
+strength-reduced away.
+==============================================================================
+
+### bench::CpuIntWorkload::run_batch()
+    one op = acc = (acc*K) + ((acc>>17) ^ i) on one of 8 lanes; the lane loop is unrolled,
+    so one iteration of the hot loop = 8 ops
+function: 117 instructions; hot loop: 43 instructions
+hot-loop mnemonics: add x9, mov x8, imul x8, shr x8, xor x8, cmp x1, jne x1
+expected: imul 8 = one per lane; shr 8 = the >>17; xor 8 = the ^ i
+  [OK  ] imul: expected 8, found 8
+  [OK  ] shr: expected 8, found 8
+  [OK  ] xor: expected 8, found 8
+--- hot loop ---
+  98:	mov    %rsi,%r12
+  9b:	imul   %rdx,%rsi
+  9f:	shr    $0x11,%r12
+  a3:	xor    %rax,%r12
+  a6:	add    %r12,%rsi
+  a9:	mov    %rbx,%r12
+  ac:	imul   %rdx,%rbx
+  b0:	shr    $0x11,%r12
+  b4:	xor    %rax,%r12
+  b7:	add    %r12,%rbx
+  ba:	mov    %r11,%r12
+  bd:	imul   %rdx,%r11
+  c1:	shr    $0x11,%r12
+  c5:	xor    %rax,%r12
+  c8:	add    %r12,%r11
+  cb:	mov    %r10,%r12
+  ce:	imul   %rdx,%r10
+  d2:	shr    $0x11,%r12
+  d6:	xor    %rax,%r12
+  d9:	add    %r12,%r10
+  dc:	mov    %rcx,%r12
+  df:	imul   %rdx,%rcx
+  e3:	shr    $0x11,%r12
+  e7:	xor    %rax,%r12
+  ea:	add    %r12,%rcx
+  ed:	mov    %r9,%r12
+  f0:	imul   %rdx,%r9
+  f4:	shr    $0x11,%r12
+  f8:	xor    %rax,%r12
+  fb:	add    %r12,%r9
+  fe:	mov    %r8,%r12
+ 101:	imul   %rdx,%r8
+ 105:	shr    $0x11,%r12
+ 109:	xor    %rax,%r12
+ 10c:	add    %r12,%r8
+ 10f:	mov    %rdi,%r12
+ 112:	imul   %rdx,%rdi
+ 116:	shr    $0x11,%r12
+ 11a:	xor    %rax,%r12
+ 11d:	add    %r12,%rdi
+ 120:	add    $0x1,%rax
+ 124:	cmp    $0x20000,%rax
+ 12a:	jne    98 <bench::CpuIntWorkload::run_batch()+0x98>
+
+### bench::CpuFpWorkload::run_batch()
+    one op = one double-precision FMA on one of 8 lanes; one iteration = 8 lane-FMAs
+    GCC packed lanes 0-3 into a single ymm FMA and left lanes 4-7 scalar
+function: 66 instructions; hot loop: 7 instructions
+hot-loop mnemonics: vfmadd132sd x4, vfmadd132pd x1, sub x1, jne x1
+expected: 1 packed x 4 doubles + 4 scalar = 8 lane-FMAs
+  [OK  ] vfmadd132pd: expected 1, found 1
+  [OK  ] vfmadd132sd: expected 4, found 4
+  [OK  ] no separate vmul* in the loop (a split mul+add would mean the op is not a fused FMA): 0
+--- hot loop ---
+  90:	vfmadd132pd %ymm14,%ymm9,%ymm1
+  95:	vfmadd132sd %xmm13,%xmm8,%xmm2
+  9a:	sub    $0x1,%rax
+  9e:	vfmadd132sd %xmm12,%xmm7,%xmm0
+  a3:	vfmadd132sd %xmm11,%xmm6,%xmm4
+  a8:	vfmadd132sd %xmm10,%xmm5,%xmm3
+  ad:	jne    90 <bench::CpuFpWorkload::run_batch()+0x90>
+
+### bench::CpuHashWorkload::run_batch()
+    one op = one 64-byte block through the xxHash64-style mixer, then folded
+    one iteration = one block
+function: 184 instructions; hot loop: 152 instructions
+hot-loop mnemonics: mov x48, imul x31, add x20, rorx x16, xor x9, pop x6, movabs x5, shr x3, lea x2, je x2, subq x2, jne x2, shl x1, cmp x1, sub x1, ret x1, xchg x1, jmp x1
+expected: imul 31 = 8 rounds x2 + 4 merges x3 + 2 avalanche + 1 fold; rorx 16 = 12 round rotates + 4 lane rotates
+  [OK  ] imul: expected 31, found 31
+  [OK  ] rorx: expected 16, found 16
+  note: std::rotl compiles to BMI2 rorx (rotate right by 64-n), not rol.
+  note: the std::bit_cast staging array is gone - the eight words are loaded
+        straight out of the buffer with 64-bit movs.
+--- hot loop ---
+  b8:	imul   %rdx,%rsi
+  bc:	mov    0x18(%rsp),%rbx
+  c1:	mov    %r13,%rax
+  c4:	shl    $0x6,%rax
+  c8:	add    %rbx,%rax
+  cb:	mov    (%rax),%r9
+  ce:	mov    0x10(%rax),%r10
+  d2:	mov    %rsi,0x28(%rsp)
+  d7:	mov    0x8(%rax),%r14
+  db:	mov    0x20(%rax),%rsi
+  df:	mov    0x18(%rax),%r12
+  e3:	mov    0x28(%rax),%rbx
+  e7:	mov    %r9,0x30(%rsp)
+  ec:	mov    0x30(%rax),%r11
+  f0:	mov    0x38(%rax),%rax
+  f4:	mov    %rsi,0x50(%rsp)
+  f9:	mov    %r12,0x88(%rsp)
+ 101:	mov    %rax,0xa8(%rsp)
+ 109:	mov    %rax,0x68(%rsp)
+ 10e:	mov    %r9,%rax
+ 111:	imul   %rcx,%rax
+ 115:	mov    %r12,0x48(%rsp)
+ 11a:	mov    %rsi,%r12
+ 11d:	mov    %rsi,0x90(%rsp)
+ 125:	imul   %rcx,%r12
+ 129:	lea    0x1(%r14),%rsi
+ 12d:	imul   %rcx,%rsi
+ 131:	mov    %rbx,0x98(%rsp)
+ 139:	mov    %rbx,0x58(%rsp)
+ 13e:	movabs $0x60ea27eeadc0b5d6,%rbx
+ 148:	mov    %r9,0x70(%rsp)
+ 14d:	lea    (%rax,%rbx,1),%r9
+ 151:	mov    0x98(%rsp),%rax
+ 159:	add    %r8,%rsi
+ 15c:	mov    %r11,0xa0(%rsp)
+ 164:	add    %r8,%r9
+ 167:	imul   %rcx,%rax
+ 16b:	mov    %r11,0x60(%rsp)
+ 170:	mov    %rcx,%r11
+ 173:	rorx   $0x21,%rsi,%rsi
+ 179:	imul   %rdx,%rsi
+ 17d:	mov    %r10,0x40(%rsp)
+ 182:	rorx   $0x21,%r9,%r9
+ 188:	imul   %r10,%r11
+ 18c:	mov    %r10,0x80(%rsp)
+ 194:	mov    0x88(%rsp),%r10
+ 19c:	imul   %rdx,%r9
+ 1a0:	mov    %r14,0x38(%rsp)
+ 1a5:	add    %rax,%rsi
+ 1a8:	mov    0xa0(%rsp),%rax
+ 1b0:	imul   %rcx,%r10
+ 1b4:	mov    %r14,0x78(%rsp)
+ 1b9:	add    %r8,%r11
+ 1bc:	rorx   $0x21,%rsi,%rsi
+ 1c2:	imul   %rcx,%rax
+ 1c6:	rorx   $0x21,%r11,%r11
+ 1cc:	add    %r12,%r9
+ 1cf:	imul   %rdx,%r11
+ 1d3:	rorx   $0x21,%r9,%r9
+ 1d9:	mov    %r9,%rbx
+ 1dc:	imul   %rdx,%rbx
+ 1e0:	imul   %rdi,%r9
+ 1e4:	add    %rax,%r11
+ 1e7:	movabs $0x61c8864e7a143579,%rax
+ 1f1:	add    %rax,%r10
+ 1f4:	mov    0xa8(%rsp),%rax
+ 1fc:	rorx   $0x21,%r11,%r11
+ 202:	rorx   $0x3f,%rbx,%rbx
+ 208:	add    %r8,%r10
+ 20b:	rorx   $0x21,%r9,%r9
+ 211:	imul   %rcx,%rax
+ 215:	rorx   $0x21,%r10,%r10
+ 21b:	imul   %rdx,%r10
+ 21f:	add    %rax,%r10
+ 222:	mov    %rsi,%rax
+ 225:	imul   %rdx,%rax
+ 229:	rorx   $0x21,%r10,%r10
+ 22f:	rorx   $0x39,%rax,%rax
+ 235:	add    %rax,%rbx
+ 238:	mov    %r11,%rax
+ 23b:	imul   %rdx,%rax
+ 23f:	rorx   $0x34,%rax,%rax
+ 245:	add    %rax,%rbx
+ 248:	mov    %r10,%rax
+ 24b:	imul   %rdx,%rax
+ 24f:	rorx   $0x2e,%rax,%rax
+ 255:	add    %rbx,%rax
+ 258:	imul   %rdx,%r9
+ 25c:	add    $0x1,%r13
+ 260:	movabs $0x85ebca77c2b2aea3,%rbx
+ 26a:	imul   %rdi,%rsi
+ 26e:	imul   %rdi,%r11
+ 272:	xor    %r9,%rax
+ 275:	imul   %rdi,%r10
+ 279:	imul   %rdx,%rax
+ 27d:	rorx   $0x21,%rsi,%rsi
+ 283:	imul   %rdx,%rsi
+ 287:	rorx   $0x21,%r11,%r11
+ 28d:	imul   %rdx,%r11
+ 291:	rorx   $0x21,%r10,%r10
+ 297:	add    %r15,%rax
+ 29a:	imul   %rdx,%r10
+ 29e:	xor    %rsi,%rax
+ 2a1:	mov    0x28(%rsp),%rsi
+ 2a6:	imul   %rdx,%rax
+ 2aa:	add    %r15,%rax
+ 2ad:	xor    %r11,%rax
+ 2b0:	imul   %rdx,%rax
+ 2b4:	add    %r15,%rax
+ 2b7:	xor    %r10,%rax
+ 2ba:	imul   %rdx,%rax
+ 2be:	add    %rbx,%rax
+ 2c1:	mov    %rax,%rbx
+ 2c4:	shr    $0x21,%rbx
+ 2c8:	xor    %rbx,%rax
+ 2cb:	imul   %rcx,%rax
+ 2cf:	mov    %rax,%rbx
+ 2d2:	shr    $0x1d,%rbx
+ 2d6:	xor    %rbx,%rax
+ 2d9:	movabs $0x165667b19e3779f9,%rbx
+ 2e3:	imul   %rbx,%rax
+ 2e7:	mov    %rax,%rbx
+ 2ea:	shr    $0x20,%rbx
+ 2ee:	xor    %rbx,%rax
+ 2f1:	movabs $0x27d4eb2f165667c5,%rbx
+ 2fb:	xor    %rbx,%rax
+ 2fe:	add    %rax,%rsi
+ 301:	cmp    %r13,0x20(%rsp)
+ 306:	je     350 <bench::CpuHashWorkload::run_batch()+0x320>
+ 308:	subq   $0x1,0x10(%rsp)
+ 30e:	jne    b8 <bench::CpuHashWorkload::run_batch()+0x88>
+ 314:	mov    0x8(%rsp),%r9
+ 319:	mov    %r13,%r14
+ 31c:	mov    %r14,0x30(%r9)
+ 320:	mov    %rsi,0x40(%r9)
+ 324:	mov    0xb8(%rsp),%rax
+ 32c:	sub    %fs:0x28,%rax
+ 335:	jne    36a <bench::CpuHashWorkload::run_batch()+0x33a>
+ 337:	add    $0xc8,%rsp
+ 33e:	mov    $0x10000,%eax
+ 343:	pop    %rbx
+ 344:	pop    %r12
+ 346:	pop    %r13
+ 348:	pop    %r14
+ 34a:	pop    %r15
+ 34c:	pop    %rbp
+ 34d:	ret    
+ 34e:	xchg   %ax,%ax
+ 350:	subq   $0x1,0x10(%rsp)
+ 356:	je     360 <bench::CpuHashWorkload::run_batch()+0x330>
+ 358:	xor    %r13d,%r13d
+ 35b:	jmp    b8 <bench::CpuHashWorkload::run_batch()+0x88>

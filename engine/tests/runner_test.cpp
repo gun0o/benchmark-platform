@@ -125,7 +125,7 @@ TEST(Runner, RejectsBadConfig) {
 
 TEST(Runner, UnimplementedWorkloadThrows) {
     RunConfig c = quick(1, 0, 5);
-    c.workloads = {Workload::cpu_fp};
+    c.workloads = {Workload::mem_bw};
     EXPECT_THROW(run_benchmarks(c, MachineInfo{}, {"bench"}), std::runtime_error);
 }
 

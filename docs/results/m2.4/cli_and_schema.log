@@ -1,0 +1,20 @@
+M2.4 verify: CLI surface and schema validation
+2026-09-20T23:29:41-05:00
+
+$ bench list
+WORKLOAD     STATUS    METRICS                                                        DESCRIPTION
+cpu_int      ready     cpu_int_ops                                                    64-bit integer mul/shift/xor/add on 8 lanes
+cpu_fp       ready     cpu_fp_ops                                                     double-precision FMA on 8 lanes
+cpu_hash     ready     cpu_hash_ops                                                   xxHash-style 64-byte block hashing
+mem_bw       planned   mem_read_bw,mem_write_bw,mem_copy_bw                           streaming read / write / copy over a per-thread buffer
+mem_latency  planned   mem_latency                                                    dependent-load pointer chase (Sattolo cycle)
+disk_seq     planned   disk_seq_read_bw,disk_seq_write_bw                             1 MiB O_DIRECT sequential read / write
+disk_rand    planned   disk_rand_read_iops,disk_rand_write_iops,disk_rand_read_p99_us 4 KiB O_DIRECT random read / write, QD = threads
+
+$ bench validate (engine's own structural check)
+valid: docs/results/m2.4/cpu_sweep_unpinned.json (630 results)
+valid: docs/results/m2.4/cpu_sweep_pinned.json (630 results)
+
+$ check-jsonschema against schema/benchmark-result.schema.json
+ok -- validation done
+ok -- validation done

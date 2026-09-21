@@ -6,7 +6,7 @@ dashboard visualizes and compares hardware. Everything runs locally with docker-
 
 Portfolio project. Every performance claim in this repo is a **measured** number with a
 recorded methodology, never an assumed one. See `PLAN.md` for the build order and
-`docs/results/` (once it exists) for real numbers.
+`docs/results/` for real numbers (`docs/results/README.md` is the summary table).
 
 ## Architecture
 
@@ -128,6 +128,7 @@ cmake --preset asan && cmake --build --preset asan && ctest --preset asan   # sa
 ./build/release/bench list                   # list workloads and metrics
 ./build/release/bench sysinfo                # print machine block as JSON
 ./build/release/bench run --workload cpu_int --threads 1,2,4,8,16 --trials 30 --out run.json
+./build/release/bench run --workload cpu_int,cpu_fp,cpu_hash --threads 1,2,4,8,11,16,22 --trials 30  # M2.4 sweep
 ./build/release/bench run --workload cpu_int --trials 12 --warmup 0 --spin-ms 0 --verbose   # see the warmup effect
 ./build/release/bench run --workload cpu_int --threads 8 --pin --verbose                    # per-trial start spread + CPU ids
 ./build/release/bench run --workload cpu_int --trials 1000 --max-seconds 120                # safety cap; stops at a trial boundary

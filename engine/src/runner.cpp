@@ -5,6 +5,8 @@
 #include "bench/sync.hpp"
 #include "bench/timing.hpp"
 #include "bench/workload.hpp"
+#include "bench/workloads/cpu_fp.hpp"
+#include "bench/workloads/cpu_hash.hpp"
 #include "bench/workloads/cpu_int.hpp"
 
 #include <algorithm>
@@ -30,8 +32,8 @@ const std::vector<WorkloadDesc>& workload_registry() {
          {Metric::cpu_int_ops},
          "64-bit integer mul/shift/xor/add on 8 lanes",
          true},
-        {Workload::cpu_fp, {Metric::cpu_fp_ops}, "double-precision FMA on 8 lanes", false},
-        {Workload::cpu_hash, {Metric::cpu_hash_ops}, "xxHash-style 64-byte block hashing", false},
+        {Workload::cpu_fp, {Metric::cpu_fp_ops}, "double-precision FMA on 8 lanes", true},
+        {Workload::cpu_hash, {Metric::cpu_hash_ops}, "xxHash-style 64-byte block hashing", true},
         {Workload::mem_bw,
          {Metric::mem_read_bw, Metric::mem_write_bw, Metric::mem_copy_bw},
          "streaming read / write / copy over a per-thread buffer",
@@ -320,7 +322,7 @@ StopReason run_config(const RunConfig& cfg, Workload kind, Metric metric, int n_
             {"spin_ms", cfg.spin_ms},
             {"seed", cfg.seed},
             {"ops", total_ops},
-            {"batch_ops", W::kItersPerBatch * static_cast<std::uint64_t>(W::kLanes)},
+            {"batch_ops", W::kBatchOps},
             {"clock_res_ns", clock.resolution_ns},
             {"clock_call_ns", clock.mean_call_ns},
             {"start_spread_us", static_cast<double>(ns_between(first_start, last_start)) / 1e3},
@@ -442,6 +444,16 @@ RunEnvelope run_benchmarks(const RunConfig& cfg, const MachineInfo& machine,
                     stop = run_config<CpuIntWorkload>(cfg, kind, Metric::cpu_int_ops, threads, ws,
                                                       machine.l3_kb, clock, cpu_list, deadline, run,
                                                       progress);
+                    break;
+                case Workload::cpu_fp:
+                    stop = run_config<CpuFpWorkload>(cfg, kind, Metric::cpu_fp_ops, threads, ws,
+                                                     machine.l3_kb, clock, cpu_list, deadline, run,
+                                                     progress);
+                    break;
+                case Workload::cpu_hash:
+                    stop = run_config<CpuHashWorkload>(cfg, kind, Metric::cpu_hash_ops, threads, ws,
+                                                       machine.l3_kb, clock, cpu_list, deadline,
+                                                       run, progress);
                     break;
                 default:
                     throw std::runtime_error(

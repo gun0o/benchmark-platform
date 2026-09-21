@@ -1,0 +1,13 @@
+M2.4 verify: trial-length scaling (the M1.2 check applied to all three kernels)
+
+Run the same configuration at 50 ms and 100 ms per trial. A longer trial must do
+proportionally more work (ops ratio ~2) while reporting the SAME rate (ops/s ratio ~1).
+If a kernel were partly optimised away, or if ops were estimated from the clock
+rather than counted, these two could not both hold.
+
+workload        ops @50ms     ops @100ms  ops ratio   ops/s @50ms  ops/s @100ms  rate ratio
+cpu_int         187695104      397410304      2.117     3.747e+09     3.966e+09       1.059
+cpu_fp          373293056      749731840      2.008      7.45e+09     7.492e+09       1.006
+cpu_hash          6225920       12582912      2.021     1.241e+08     1.253e+08       1.010
+
+Pass criteria: ops ratio in [1.5, 2.5], rate ratio within 20% of 1.0.

@@ -462,6 +462,48 @@ browser with zero manual steps beyond `make up` and `make bench`.
   compute-bound, not L1-bandwidth-bound.
 - Hybrid cores: per-thread throughput on E-core vCPUs is ~40–60% of P-core; aggregate
   scaling flattens after ~6 threads. This is a real finding, plot it.
+- Done 2026-09-20 (write-up: `docs/notes/M2.4.md`, runs: `docs/results/m2.4/`, headline
+  file: `docs/results/cpu_2026-09-20.json`, table: `docs/results/README.md`). Measured
+  plugged in, Windows plan Balanced, power mode **Best power efficiency**, battery low and
+  charging — left as found, so the numbers are a floor. **Target #1 met**: 3.711e10
+  (`cpu_int`, 16 threads), 8.587e10 (`cpu_fp`, 22), 1.083e9 (`cpu_hash`, 16), against a
+  1e7 bar. Deviations from the text above, all measured:
+  - **Op counts moved onto the `Workload` concept as `kBatchOps`.** The runner computed
+    `kItersPerBatch × kLanes`, which is only an op count when a lane is an op. `cpu_hash`'s
+    four mixing lanes cooperate on one block, so that formula would have over-reported by
+    4×. Each workload now declares the constant and the concept requires it to be positive
+    and compile-time.
+  - **`cpu_hash`'s XOR fold cancelled to zero and was replaced.** 64 Ki ops over 64 blocks
+    hashes every block exactly 1024 times, and an even number of XORs is zero: the digest
+    was identically 0. Not exploitable by the compiler (it cannot see the buffer's contents
+    or length) but untestable, which is the actual defect. `acc = acc * P1 + h` costs a
+    measured 3–5 % (three binaries, run alternately, `hash_fold.log`) and is reported as
+    part of the metric rather than absorbed.
+  - **The disassembly check is by exact count, not presence.** Presence survives a compiler
+    hoisting seven of eight lanes out of the loop. Predicted then confirmed: `cpu_int`
+    8/8/8 `imul`/`shr`/`xor`; `cpu_fp` 1 `vfmadd132pd` + 4 `vfmadd132sd` (GCC packed lanes
+    0–3) and zero `vmul*`; `cpu_hash` 31 `imul` and 16 rotates, matching 16 round + 12
+    merge + 2 avalanche + 1 fold, and 12 + 4. Note `std::rotl` emits BMI2 `rorx`, not
+    `rol` — checking for `rol` would fail on correct code.
+  - **Frequency had to be measured, so ops/cycle exists at all.** WSL2 reports a synthetic
+    3071.998 MHz on all 22 vCPUs, `/sys/.../cpufreq` is absent, Windows reports only the
+    2.3 GHz nominal. A dependent-`add $1,reg` chain reported 25 GHz because recent Intel
+    cores collapse add-with-immediate in the renamer; two chains of *different* known
+    latencies (`add reg,reg` and `imul`) cross-check at ratio 2.99/3.00 and give
+    **~4.28 GHz**.
+  - **ops/cycle was predicted from the disassembly before measurement, three for three**:
+    `cpu_int` 1.00 predicted / 0.90 measured, `cpu_fp` 2.00 / 1.85, `cpu_hash` ≤0.032 /
+    0.030. All 7–8 % low in the same direction, consistent with a sustained clock slightly
+    under the probe's best-case 4.28 GHz.
+  - **Scaling flattens at ~11 threads, not ~6, and peaks at 16.** Efficiency 91/89/84 % at
+    8 threads, 60/67/53 % at 16, 39/49/38 % at 22 (int/fp/hash).
+  - **Pinning was 6–9 % slower** at the best thread count, the third milestone to find this
+    (M2.1, M2.3): guest-side pinning does not choose the physical core.
+  - **The 10M-ops floor test skips under ASan/TSan.** `cpu_hash` runs 15× slower under ASan
+    (8.0e6 vs 1.19e8) because every load is shadow-checked; asserting a hardware target in
+    an instrumented build asserts the wrong thing. Target #1 lives in `docs/results/`.
+  - 16 new tests (12 functional + 4 perf-labelled); 97/97 in release, debug, ci, asan and
+    tsan, 11/11 perf in release.
 
 ### M2.5 Variance: CoV ≤ 3% over 1000 trials
 **Build**

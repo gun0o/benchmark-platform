@@ -1,0 +1,11 @@
+# environment at the start of the M2.4 verification runs
+2026-09-20T23:14:17-05:00
+PowerLineStatus: Online  battery: Low, Charging 24%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)overlay AC: 961cc777-2547-4f9d-8174-7d86181b8a7a  overlay DC: 961cc777-2547-4f9d-8174-7d86181b8a7a
+ 23:14:18 up  7:46,  2 users,  load average: 1.33, 0.99, 0.69
+docker: 2 containers running
+model name	: Intel(R) Core(TM) Ultra 9 185H
+logical cpus: 22
+=== containers stopped before the measurement runs
+2026-09-20T23:14:29-05:00
+ 23:14:29 up  7:46,  2 users,  load average: 1.29, 0.99, 0.70

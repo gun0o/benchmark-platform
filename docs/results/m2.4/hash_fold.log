@@ -1,0 +1,77 @@
+M2.4: choosing the cpu_hash accumulator fold
+
+Three folds, built as three separate binaries from the same source and run ALTERNATELY
+(not one after the other) so thermal drift hits all of them equally. Each measurement is
+the median of 21 trials at 50 ms, 1 thread; 9 repetitions per binary.
+
+The XOR fold was the original. It had to go: the batch is 64 Ki ops over 64 blocks, so
+every block is hashed exactly 1024 times and an even number of XORs of the same value
+cancels. The digest was identically 0 at the end of every batch - a sink that provably
+carries nothing out of the loop, and untestable.
+
+=== study 1: xor vs multiply-accumulate ===
+rep 0 xor     median 1.334e+08 ops/s  cov 0.208
+rep 0 muladd  median 1.274e+08 ops/s  cov 0.081
+rep 1 xor     median 1.297e+08 ops/s  cov 0.158
+rep 1 muladd  median 1.264e+08 ops/s  cov 0.228
+rep 2 xor     median 1.283e+08 ops/s  cov 0.120
+rep 2 muladd  median 1.249e+08 ops/s  cov 0.073
+rep 3 xor     median 1.345e+08 ops/s  cov 0.101
+rep 3 muladd  median 1.255e+08 ops/s  cov 0.085
+rep 4 xor     median 1.295e+08 ops/s  cov 0.147
+rep 4 muladd  median 1.249e+08 ops/s  cov 0.109
+rep 5 xor     median 1.282e+08 ops/s  cov 0.209
+rep 5 muladd  median 1.28e+08 ops/s  cov 0.099
+rep 6 xor     median 1.3e+08 ops/s  cov 0.170
+rep 6 muladd  median 1.209e+08 ops/s  cov 0.216
+rep 7 xor     median 1.298e+08 ops/s  cov 0.071
+rep 7 muladd  median 1.29e+08 ops/s  cov 0.065
+rep 8 xor     median 1.329e+08 ops/s  cov 0.101
+rep 8 muladd  median 1.244e+08 ops/s  cov 0.172
+
+xor     n=9  median-of-medians 1.298e+08  min 1.282e+08  max 1.345e+08
+muladd  n=9  median-of-medians 1.255e+08  min 1.209e+08  max 1.29e+08
+
+muladd / xor = 0.9665
+
+=== study 2: xor vs add vs multiply-accumulate ===
+rep 0 xor     median 1.268e+08 ops/s  cov 0.228
+rep 0 add     median 1.312e+08 ops/s  cov 0.117
+rep 0 muladd  median 1.246e+08 ops/s  cov 0.078
+rep 1 xor     median 1.231e+08 ops/s  cov 0.204
+rep 1 add     median 1.2e+08 ops/s  cov 0.155
+rep 1 muladd  median 1.251e+08 ops/s  cov 0.185
+rep 2 xor     median 1.361e+08 ops/s  cov 0.085
+rep 2 add     median 1.294e+08 ops/s  cov 0.110
+rep 2 muladd  median 1.289e+08 ops/s  cov 0.050
+rep 3 xor     median 1.363e+08 ops/s  cov 0.032
+rep 3 add     median 1.376e+08 ops/s  cov 0.038
+rep 3 muladd  median 1.293e+08 ops/s  cov 0.050
+rep 4 xor     median 1.365e+08 ops/s  cov 0.032
+rep 4 add     median 1.284e+08 ops/s  cov 0.036
+rep 4 muladd  median 1.259e+08 ops/s  cov 0.072
+rep 5 xor     median 1.372e+08 ops/s  cov 0.030
+rep 5 add     median 1.371e+08 ops/s  cov 0.050
+rep 5 muladd  median 1.328e+08 ops/s  cov 0.036
+rep 6 xor     median 1.36e+08 ops/s  cov 0.039
+rep 6 add     median 1.348e+08 ops/s  cov 0.050
+rep 6 muladd  median 1.314e+08 ops/s  cov 0.061
+rep 7 xor     median 1.354e+08 ops/s  cov 0.061
+rep 7 add     median 1.393e+08 ops/s  cov 0.066
+rep 7 muladd  median 1.342e+08 ops/s  cov 0.019
+rep 8 xor     median 1.346e+08 ops/s  cov 0.053
+rep 8 add     median 1.261e+08 ops/s  cov 0.031
+rep 8 muladd  median 1.192e+08 ops/s  cov 0.052
+
+xor     n=9  median-of-medians 1.36e+08  min 1.231e+08  max 1.372e+08
+add     n=9  median-of-medians 1.312e+08  min 1.2e+08  max 1.393e+08
+muladd  n=9  median-of-medians 1.289e+08  min 1.192e+08  max 1.342e+08
+
+add / xor = 0.9644
+muladd / xor = 0.9477
+
+Conclusion: the non-cancelling folds cost 3-5% of the reported rate. Multiply-accumulate
+was chosen anyway - it is order-dependent and cannot cancel, so the digest is a real
+checksum over every block the batch touched, which CpuHash.ConsumesEveryBlockAndFoldsThemAll
+checks. The run-to-run spread (+/-6%) is wider than the gap between the three folds, so
+the ordering is consistent across both studies but the exact percentage is not precise.
